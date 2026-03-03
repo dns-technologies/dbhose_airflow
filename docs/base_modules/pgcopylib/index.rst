@@ -6,7 +6,7 @@ pgcopylib
 .. toctree::
    :caption: Линки на проект:
 
-   GitHub <https://github.com/0xMihalich/pgcopylib>
+   GitHub <https://github.com/dns-technologies/pgcopylib>
    PyPI <https://pypi.org/project/pgcopylib/>
 
 Установка модуля pgcopylib без установки dbhose-airflow

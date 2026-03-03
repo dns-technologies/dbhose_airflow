@@ -8,7 +8,7 @@ dbhose_utils
 .. toctree::
    :caption: Линки на проект:
 
-   GitHub <https://github.com/0xMihalich/dbhose_utils>
+   GitHub <https://github.com/dns-technologies/dbhose_utils>
    PyPI <https://pypi.org/project/dbhose-utils/>
 
 Установка модуля dbhose_utils без установки dbhose-airflow

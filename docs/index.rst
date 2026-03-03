@@ -1,10 +1,12 @@
 DBHose-Airflow
-============================
+==============
 
 .. image:: /_static/title.png
    :alt: DBHose-Airflow Logo
    :align: center
    :width: 100%
+
+**Граф зависимости модулей**
 
 .. image:: /_static/graph.svg
    :alt: DBHose-Airflow Architecture
@@ -28,5 +30,5 @@ DBHose-Airflow
    :hidden:
    :caption: Линки на проект:
 
-   GitHub <https://github.com/0xMihalich/dbhose_airflow>
+   GitHub <https://github.com/dns-technologies/dbhose_airflow>
    PyPI <https://pypi.org/project/dbhose-airflow/>

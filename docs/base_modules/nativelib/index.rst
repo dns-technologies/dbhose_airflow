@@ -6,7 +6,7 @@ nativelib
 .. toctree::
    :caption: Линки на проект:
 
-   GitHub <https://github.com/0xMihalich/nativelib>
+   GitHub <https://github.com/dns-technologies/nativelib>
    PyPI <https://pypi.org/project/nativelib/>
 
 Установка модуля nativelib без установки dbhose-airflow

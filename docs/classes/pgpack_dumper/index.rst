@@ -30,7 +30,7 @@ PGPackDumper
 .. toctree::
    :caption: Линки на проект:
 
-   GitHub <https://github.com/0xMihalich/pgpack_dumper>
+   GitHub <https://github.com/dns-technologies/pgpack_dumper>
    PyPI <https://pypi.org/project/pgpack-dumper/>
 
 Часть кода написана на языке ``Cython``, что обеспечивает более быструю работу по сравнению с языком ``Python``.

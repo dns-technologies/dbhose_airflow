@@ -13,7 +13,7 @@ _(())\_)() /((_) (( )   )\    )\     )\  '  /((_)  (_))/    )\   (_))_  ((_)_   
 
 Класс `DBHose` предоставляет универсальный интерфейс для переноса данных между различными источниками в Apache Airflow DAGs.
 
-[Официальная документация](https://0xmihalich.github.io/dbhose_airflow/)
+[Документация](https://dns-technologies.github.io/dbhose_airflow/)
 
 ## ⚠️ Статус проекта
 

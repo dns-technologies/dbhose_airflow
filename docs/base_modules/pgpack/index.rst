@@ -6,7 +6,7 @@ pgpack
 .. toctree::
    :caption: Линки на проект:
 
-   GitHub <https://github.com/0xMihalich/pgpack>
+   GitHub <https://github.com/dns-technologies/pgpack>
    PyPI <https://pypi.org/project/pgpack/>
 
 Установка модуля pgpack без установки dbhose-airflow

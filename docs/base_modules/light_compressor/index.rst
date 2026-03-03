@@ -6,7 +6,7 @@ light_compressor
 .. toctree::
    :caption: Линки на проект:
 
-   GitHub <https://github.com/0xMihalich/light_compressor>
+   GitHub <https://github.com/dns-technologies/light_compressor>
    PyPI <https://pypi.org/project/light-compressor/>
 
 Установка модуля light-compressor без установки dbhose-airflow

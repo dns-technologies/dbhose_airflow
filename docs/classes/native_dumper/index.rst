@@ -35,7 +35,7 @@ NativeDumper
 .. toctree::
    :caption: Линки на проект:
 
-   GitHub <https://github.com/0xMihalich/native_dumper>
+   GitHub <https://github.com/dns-technologies/native_dumper>
    PyPI <https://pypi.org/project/native-dumper/>
 
 Часть кода написана на языке ``Rust``, что обеспечивает более быструю работу по сравнению с языком ``Python``.
