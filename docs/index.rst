@@ -8,11 +8,40 @@ DBHose-Airflow
 
 **Граф зависимости модулей**
 
-.. image:: /_static/graph.svg
-   :alt: DBHose-Airflow Architecture
-   :align: center
-   :width: 100%
-   :class: architecture-diagram
+.. only:: html
+
+   .. image:: /_static/graph.svg
+      :alt: DBHose-Airflow Architecture
+      :align: center
+      :width: 100%
+      :class: architecture-diagram
+
+.. only:: latex
+
+   .. image:: /_static/graph.svg
+      :alt: DBHose-Airflow Architecture
+      :align: center
+      :width: 100%
+      :class: architecture-diagram
+
+.. raw:: html
+
+   <script>
+   document.addEventListener('DOMContentLoaded', function() {
+       function updateGraph() {
+           const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+           const graphImg = document.querySelector('.architecture-diagram img');
+           if (graphImg) {
+               graphImg.src = isDark ? '/_static/graph-dark.svg' : '/_static/graph.svg';
+           }
+       }
+       
+       updateGraph();
+       
+       const observer = new MutationObserver(updateGraph);
+       observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+   });
+   </script>
 
 .. toctree::
    :maxdepth: 2
