@@ -14,6 +14,7 @@ DBHose-Airflow
       :alt: DBHose-Airflow Architecture
       :align: center
       :width: 100%
+      :id: theme-graph
       :class: architecture-diagram
 
 .. only:: latex
@@ -27,20 +28,26 @@ DBHose-Airflow
 .. raw:: html
 
    <script>
-   document.addEventListener('DOMContentLoaded', function() {
+   (function() {
        function updateGraph() {
            const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-           const graphImg = document.querySelector('.architecture-diagram img');
+           const graphImg = document.getElementById('theme-graph');
            if (graphImg) {
                graphImg.src = isDark ? '/_static/graph-dark.svg' : '/_static/graph.svg';
            }
        }
        
-       updateGraph();
+       // Ждем полной загрузки DOM
+       if (document.readyState === 'loading') {
+           document.addEventListener('DOMContentLoaded', updateGraph);
+       } else {
+           updateGraph();
+       }
        
+       // Отслеживаем изменение темы
        const observer = new MutationObserver(updateGraph);
        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-   });
+   })();
    </script>
 
 .. toctree::
