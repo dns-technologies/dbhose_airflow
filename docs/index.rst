@@ -8,45 +8,47 @@ DBHose-Airflow
 
 **Граф зависимости модулей**
 
-.. only:: html
-
-   .. image:: /_static/graph.svg
-      :alt: DBHose-Airflow Architecture
-      :align: center
-      :width: 100%
-      :id: theme-graph
-      :class: architecture-diagram
-
-.. only:: latex
-
-   .. image:: /_static/graph.svg
-      :alt: DBHose-Airflow Architecture
-      :align: center
-      :width: 100%
-      :class: architecture-diagram
+.. image:: /_static/graph.svg
+   :alt: DBHose-Airflow Architecture
+   :align: center
+   :width: 100%
+   :class: architecture-diagram
 
 .. raw:: html
 
    <script>
    (function() {
+       // Функция обновления изображения
        function updateGraph() {
            const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-           const graphImg = document.getElementById('theme-graph');
-           if (graphImg) {
-               graphImg.src = isDark ? '/_static/graph-dark.svg' : '/_static/graph.svg';
-           }
+           // Ищем все изображения с классом architecture-diagram
+           const graphImgs = document.querySelectorAll('img.architecture-diagram');
+           graphImgs.forEach(function(img) {
+               // Проверяем что это наше изображение (содержит graph в src)
+               if (img.src.includes('graph.svg') || img.src.includes('graph-dark.svg')) {
+                   img.src = isDark ? '/_static/graph-dark.svg' : '/_static/graph.svg';
+               }
+           });
        }
-       
-       // Ждем полной загрузки DOM
+
+       // Ждем загрузки страницы
        if (document.readyState === 'loading') {
            document.addEventListener('DOMContentLoaded', updateGraph);
        } else {
-           updateGraph();
+           // Небольшая задержка чтобы убедиться что все загрузилось
+           setTimeout(updateGraph, 100);
        }
        
-       // Отслеживаем изменение темы
-       const observer = new MutationObserver(updateGraph);
-       observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+       // Следим за сменой темы
+       const observer = new MutationObserver(function(mutations) {
+           mutations.forEach(function(mutation) {
+               if (mutation.attributeName === 'data-theme') {
+                   updateGraph();
+               }
+           });
+       });
+       
+       observer.observe(document.documentElement, { attributes: true });
    })();
    </script>
 
