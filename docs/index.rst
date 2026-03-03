@@ -1,12 +1,10 @@
 DBHose-Airflow
 ==============
 
-.. image:: /_static/title.png
+.. image:: /_static/title.gif
    :alt: DBHose-Airflow Logo
    :align: center
    :width: 100%
-
-**Граф зависимости модулей**
 
 .. image:: /_static/graph-light.svg
    :alt: DBHose-Airflow Architecture
