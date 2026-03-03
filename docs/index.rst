@@ -1,19 +1,16 @@
 DBHose-Airflow
 ============================
 
-.. raw:: html
-   
-   <div class="ascii-logo">
-   <pre style="font-family: 'Courier New', monospace; font-size: 11px; line-height: 1.0;">
-   (  (                                                 )          )\ )     (    ( /(
-   )\))(   '   (    (                   )       (     ( /(        (()/(   ( )\   )\())               (
-  ((_)()\ )   ))\   )\    (     (      (       ))\    )\())   (    /(_))  )((_) ((_)\    (    (     ))\
-  _(())\_)() /((_) (( )   )\    )\     )\  '  /((_)  (_))/    )\   (_))_  ((_)_   _((_)   )\   )\   /((_)
-  \ \((_)/ /(_))   | |   ((_)  ((_)  _((_))  (_))    | |_    ((_)   |   \  | _ ) | || |  ((_) ((_) (_))
-   \ \/\/ / / -_)  | |  / _|  / _ \ | ' ' |  / -_)   |  _|  / _ \   | |) | | _ \ | __ | / _ \ (_-< / -_)
-    \_/\_/  \___|  |_|  \__|  \___/ |_|_|_|  \___|    \__|  \___/   |___/  |___/ |_||_| \___/ /__/ \___|
-   </pre>
-   </div>
+.. image:: /_static/title.png
+   :alt: DBHose-Airflow Logo
+   :align: center
+   :width: 100%
+
+.. image:: /_static/graph.svg
+   :alt: DBHose-Airflow Architecture
+   :align: center
+   :width: 100%
+   :class: architecture-diagram
 
 .. toctree::
    :maxdepth: 2
