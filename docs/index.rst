@@ -8,7 +8,7 @@ DBHose-Airflow
 
 **Граф зависимости модулей**
 
-.. image:: /_static/graph.svg
+.. image:: /_static/graph-light.svg
    :alt: DBHose-Airflow Architecture
    :align: center
    :width: 100%
