@@ -45,7 +45,7 @@ def define_dumper(
         conn_type, db_connector = define_connector(airflow_connection)
         connection_params = FROM_CONNTYPE[conn_type]
     except KeyError:
-        raise errors.DBHoseAirflowTypeError(
+        raise errors.DBHoseTypeError(
             f"Bad connection type \"{conn_type}\"",
         )
 

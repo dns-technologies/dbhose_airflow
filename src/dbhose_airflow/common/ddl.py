@@ -193,7 +193,7 @@ def __validate_ddl(table_meta: dict[str, Any]) -> list[dict[str, Any]]:
     columns: list[dict[str, Any]] = table_meta.get("columns", [])
 
     if not columns:
-        raise errors.DBHoseAirflowErrorNotFoundError(
+        raise errors.DBHoseErrorNotFoundError(
             "No columns found in table metadata",
         )
 
@@ -307,7 +307,7 @@ def generate_ddl(
     ddl_core = SERVER_NAME.get(cursor.__class__)
 
     if not ddl_core:
-        raise errors.DBHoseAirflowTypeError("No DDL method found.")
+        raise errors.DBHoseTypeError("No DDL method found.")
 
     if table_name[-1] in ["`", '"']:
         _table_name = table_name[:-1]
@@ -339,4 +339,4 @@ def generate_ddl(
             normalize_metadata(table_meta, is_postgres),
         )
     except Exception as error:
-        raise errors.DBHoseAirflowError(error)
+        raise errors.DBHoseError(error)

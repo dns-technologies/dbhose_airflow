@@ -28,11 +28,11 @@ def define_query(dbname: str, kind: DQCheck | MoveMethod) -> str:
         path = str(__query_path).format(query_type, dbname, kind.name)
         return __read_text(path)
     except (KeyError, ValueError, TypeError) as error:
-        raise errors.DBHoseAirflowValueError(error)
+        raise errors.DBHoseValueError(error)
     except FileNotFoundError as error:
-        raise errors.DBHoseAirflowErrorNotFoundError(error)
+        raise errors.DBHoseErrorNotFoundError(error)
     except PermissionError as error:
-        raise errors.DBHoseAirflowErrorPermissionError(error)
+        raise errors.DBHoseErrorPermissionError(error)
 
 
 def logo() -> str:
