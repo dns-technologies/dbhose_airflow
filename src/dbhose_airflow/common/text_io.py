@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from .errors import DBHoseAirflowValueError
+from . import errors
 from .structs import (
     DQCheck,
     MoveMethod,
@@ -28,7 +28,11 @@ def define_query(dbname: str, kind: DQCheck | MoveMethod) -> str:
         path = str(__query_path).format(query_type, dbname, kind.name)
         return __read_text(path)
     except (KeyError, ValueError, TypeError) as error:
-        raise DBHoseAirflowValueError(error)
+        raise errors.DBHoseAirflowValueError(error)
+    except FileNotFoundError as error:
+        raise errors.DBHoseAirflowErrorNotFoundError(error)
+    except PermissionError as error:
+        raise errors.DBHoseAirflowErrorPermissionError(error)
 
 
 def logo() -> str:
