@@ -193,7 +193,7 @@ def __validate_ddl(table_meta: dict[str, Any]) -> list[dict[str, Any]]:
     columns: list[dict[str, Any]] = table_meta.get("columns", [])
 
     if not columns:
-        raise errors.DBHoseErrorNotFoundError(
+        raise errors.DBHoseNotFoundError(
             "No columns found in table metadata",
         )
 

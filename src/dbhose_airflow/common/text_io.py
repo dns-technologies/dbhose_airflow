@@ -30,9 +30,9 @@ def define_query(dbname: str, kind: DQCheck | MoveMethod) -> str:
     except (KeyError, ValueError, TypeError) as error:
         raise errors.DBHoseValueError(error)
     except FileNotFoundError as error:
-        raise errors.DBHoseErrorNotFoundError(error)
+        raise errors.DBHoseNotFoundError(error)
     except PermissionError as error:
-        raise errors.DBHoseErrorPermissionError(error)
+        raise errors.DBHosePermissionError(error)
 
 
 def logo() -> str:

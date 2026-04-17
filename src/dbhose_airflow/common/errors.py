@@ -17,9 +17,9 @@ class DBHoseValueError(DBHoseError, BaseDumperValueError):
     """Value error."""
 
 
-class DBHoseErrorPermissionError(DBHoseError, PermissionError):
+class DBHosePermissionError(DBHoseError, PermissionError):
     """Permission denied error."""
 
 
-class DBHoseErrorNotFoundError(DBHoseError, FileNotFoundError):
+class DBHoseNotFoundError(DBHoseError, FileNotFoundError):
     """Object not found error."""
