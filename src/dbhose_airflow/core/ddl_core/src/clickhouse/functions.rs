@@ -67,18 +67,17 @@ fn parse_column_definition(col_str: &str) -> PyResult<ClickHouseColumn> {
         while pos < bytes.len() && bytes[pos].is_ascii_whitespace() { pos += 1; }
     }
 
-    let re_type = Regex::new(concat!(
-        r"(?i)^(String|Int\d+|UInt\d+|Float\d+|Decimal\d*\(?\d*,?\d*\)?|",
-        r"Date|DateTime|UUID|Array|Map|Tuple|Nested|Enum\d*|FixedString|",
-        r"LowCardinality|Nullable|IPv[46]|JSON|Bool|AggregateFunction)",
-        r"(\([^)]*\))?",
-    )).unwrap();
+    let rest_after_name = &trimmed[pos..];
+    let keywords = Regex::new(r"(?i)\s+(COMMENT|CODEC|TTL|DEFAULT|MATERIALIZED|EPHEMERAL|ALIAS)(\s+|$)").unwrap();
+    let type_end = if let Some(m) = keywords.find(rest_after_name) {
+        m.start()
+    } else {
+        rest_after_name.len()
+    };
+    col.data_type = rest_after_name[..type_end].trim().to_string();
+    pos += type_end;
 
-    if let Some(caps) = re_type.captures(&trimmed[pos..]) {
-        col.data_type = caps[0].trim().to_string();
-        pos += caps[0].len();
-        while pos < bytes.len() && bytes[pos].is_ascii_whitespace() { pos += 1; }
-    }
+    while pos < bytes.len() && bytes[pos].is_ascii_whitespace() { pos += 1; }
 
     let re_default = Regex::new(
         r"(?i)^(DEFAULT|MATERIALIZED|EPHEMERAL|ALIAS)\s+",

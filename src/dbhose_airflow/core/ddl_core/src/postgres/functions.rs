@@ -1145,5 +1145,16 @@ pub fn postgres_ddl(
     metadata_dict.set_item("view_definition", metadata.view_definition)?;
     metadata_dict.set_item("with_data", metadata.with_data)?;
     metadata_dict.set_item("distkey", metadata.distkey)?;
+    metadata_dict.set_item("is_partitioned", metadata.partition.is_partitioned)?;
+    metadata_dict.set_item("is_partition", metadata.partition.is_partition)?;
+
+    if let Some(ref key) = metadata.partition.partition_key {
+        metadata_dict.set_item("partition_key", key)?;
+    }
+
+    if let Some(ref bound) = metadata.partition.partition_bound {
+        metadata_dict.set_item("partition_bound", bound)?;
+    }
+
     Ok((ddl, metadata_dict.into()))
 }

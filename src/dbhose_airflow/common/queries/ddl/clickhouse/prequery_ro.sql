@@ -1,1 +1,0 @@
-EXISTS {object_type} {object_name}

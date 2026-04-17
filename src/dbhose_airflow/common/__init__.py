@@ -5,6 +5,7 @@ from .airflow_connect import (
     define_connector,
     define_dumper,
 )
+from .ddl import generate_ddl
 from .defines import FROM_CONNTYPE
 from .enums import (
     DQCheck,
@@ -22,5 +23,6 @@ __all__ = (
     "MoveType",
     "define_connector",
     "define_dumper",
+    "generate_ddl",
     "FROM_CONNTYPE",
 )
