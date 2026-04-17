@@ -1,7 +1,7 @@
 # AI Assistant Contribution
 
 ## Overview
-This project, `pg_dump_core`, is a high-performance Rust extension for Python that extracts DDL and metadata from PostgreSQL, Greenplum, and ClickHouse databases. It was developed collaboratively between the human developer and the AI assistant (Anthropic's Claude) over multiple sessions.
+This project, `ddl_core`, is a high-performance Rust extension for Python that extracts DDL and metadata from PostgreSQL, Greenplum, and ClickHouse databases. It was developed collaboratively between the human developer and the AI assistant (Anthropic's Claude) over multiple sessions.
 
 ## Role of the AI Assistant
 The AI assistant contributed to this project in the following ways:
@@ -42,7 +42,7 @@ The AI assistant contributed to this project in the following ways:
 ## Files Contributed
 - `src/lib.rs`: Main implementation of PostgreSQL/Greenplum/ClickHouse DDL extraction
 - `Cargo.toml`: Dependency configuration
-- `pg_dump_core.pyi`: Python type stubs for IDE autocomplete
+- `ddl_core.pyi`: Python type stubs for IDE autocomplete
 
 ## Key Technical Decisions
 1. **Rust over Python**: Chosen for performance and type safety when parsing complex database schemas.
@@ -62,4 +62,4 @@ The AI assistant contributed to this project in the following ways:
 The AI assistant provided architectural guidance, translated complex C logic to Rust, navigated PyO3 API challenges, and helped debug runtime issues. The human developer steered the project, provided real-world test cases, and ensured the code met production standards. This collaboration resulted in a robust, performant library now used in critical data infrastructure.
 
 ---
-*This document serves as recognition of the AI assistant's contributions to the `pg_dump_core` project.*
+*This document serves as recognition of the AI assistant's contributions to the `ddl_core` project.*
