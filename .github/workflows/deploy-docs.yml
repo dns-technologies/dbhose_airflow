@@ -45,7 +45,7 @@ jobs:
       - name: Install project and documentation
         run: |
           echo "1. Installing main package (pip install -e .)..."
-          pip install -e .
+          pip install -e . --extra-index-url https://dns-technologies.github.io/dbhose-dev-pip/simple/
           
           echo "2. Installing documentation dependencies..."
           if [ -f requirements_doc.txt ]; then
