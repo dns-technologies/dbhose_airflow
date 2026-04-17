@@ -20,3 +20,22 @@ class DQCheck(DQTest, Enum):
     nan = DQTest("Table don't have NaN values", 1, 0)
     total = DQTest("Equal data total rows count between objects", 0, 1)
     sum = DQTest("Equal data sums in digits columns between objects", 1, 1)
+
+
+class MoveType(NamedTuple):
+    """Move method object."""
+
+    name: str
+    have_sql: bool
+    need_filter: bool
+    is_custom: bool
+
+
+class MoveMethod(MoveType, Enum):
+    """Insert from temp table methods."""
+
+    append = MoveType("append", False, False, False)
+    custom = MoveType("custom", False, False, True)
+    delete = MoveType("delete", True, True, False)
+    replace = MoveType("replace", True, False, False)
+    rewrite = MoveType("rewrite", False, False, False)

@@ -1,5 +1,14 @@
 # Version History
 
+## 0.2.0.dev0
+
+* Developer release (not public to pip)
+* Remove depends dbhose-utils
+* Add depends dr-herriot==0.1.0.dev0
+* Update depends native-dumper==0.3.7.dev3
+* Update depends pgpack-dumper==0.3.7.dev3
+* Add Rust core for generate DDLs
+
 ## 0.1.0.7
 
 * Fix get metadata text column from postgres/greenplum

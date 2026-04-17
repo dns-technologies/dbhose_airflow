@@ -2,13 +2,21 @@ include CHANGELOG.md
 include README.md
 include LICENSE
 
-include dbhose_airflow/LOGO
-include dbhose_airflow/*.py
-include dbhose_airflow/ddl/*.sql
-include dbhose_airflow/dq/clickhouse/*.sql
-include dbhose_airflow/dq/greenplum/*.sql
-include dbhose_airflow/dq/postgres/*.sql
-include dbhose_airflow/move/clickhouse/*.sql
-include dbhose_airflow/dq/greenplum/*.sql
-include dbhose_airflow/dq/postgres/*.sql
-recursive-include dbhose_airflow *.sql
+include src/dbhose_airflow/common/renders/LOGO
+recursive-include src/dbhose_airflow *.sql
+
+prune src/dbhose_airflow/core/ddl_core/target
+prune */target
+prune target
+
+global-exclude *.rs
+global-exclude *.toml
+global-exclude *.pyd
+global-exclude *.so
+global-exclude *.dylib
+global-exclude *.dll
+global-exclude __pycache__
+global-exclude *.pyc
+global-exclude *.*~
+global-exclude *.orig
+global-exclude *.log

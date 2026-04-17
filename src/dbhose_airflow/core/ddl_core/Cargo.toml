@@ -1,0 +1,14 @@
+[package]
+name = "ddl_core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "ddl_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.28.3", features = ["extension-module"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+regex = "1.0"
