@@ -17,6 +17,7 @@ def clickhouse_ddl(
 
     Returns:
         A tuple (ddl: str, metadata: dict)
+
     """
     ...
 
@@ -44,7 +45,9 @@ def postgres_ddl(
             - include_triggers: bool (default True)
 
     Returns:
-        Tuple (ddl: str, metadata: dict)"""
+        Tuple (ddl: str, metadata: dict)
+
+    """
     ...
 
 
@@ -61,5 +64,6 @@ def postgres_sequence_ddl(
 
     Returns:
         A tuple (ddl: str, metadata: dict)
+
     """
     ...

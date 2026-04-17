@@ -13,6 +13,11 @@ from .enums import (
     MoveMethod,
     MoveType,
 )
+from .renders.frame import wrap_frame
+from text_io import (
+    define_query,
+    logo,
+)
 
 
 __all__ = (
@@ -23,6 +28,9 @@ __all__ = (
     "MoveType",
     "define_connector",
     "define_dumper",
+    "define_query",
     "generate_ddl",
+    "logo",
+    "wrap_frame",
     "FROM_CONNTYPE",
 )

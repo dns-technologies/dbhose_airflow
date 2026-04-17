@@ -1,3 +1,11 @@
+"""Apache Airflow module for wery fast exchanging data
+between DBMSs in native binary and csv formats."""
+
+
+__author__ = "0xMihalich"
+__version__ = "0.2.0.dev0"
+
+
 # from __future__ import annotations
 # from gc import collect
 # from os.path import dirname
@@ -35,55 +43,6 @@
 #     "MoveMethod",
 #     "dbhose_dumper",
 # )
-# __author__ = "0xMihalich"
-# __version__ = "0.2.0.dev0"
-
-
-# root_path = dirname(__file__)
-# logo_path = f"{root_path}/LOGO"
-# ddl_path = f"{root_path}/ddl/{{}}.sql"
-# dq_path = f"{root_path}/dq/{{}}/{{}}.sql"
-# mv_path = f"{root_path}/move/{{}}/{{}}.sql"
-
-
-# def read_text(path: str) -> str:
-#     """Read text from file."""
-
-#     with open(path, encoding="utf-8") as file:
-#         return file.read()
-
-
-# def wrap_frame(
-#     text: str,
-#     min_width: int = 79,
-# ) -> str:
-#     """Wraps text in a frame with a minimum size.
-
-#     Arguments:
-#            text (str): Text to wrap
-#            min_width (int): Minimum frame width (default 79)
-
-#     Returns:
-#            str: Text in frame
-
-#     """
-
-#     lines = [line.strip() for line in str(text).split("\n") if line.strip()]
-#     max_line_length = max(len(line) for line in lines) if lines else 0
-#     content_width = max(
-#         max_line_length, min_width - 4,
-#     )
-#     frame_width = content_width + 4
-#     result = [""]
-#     result.append("┌" + "─" * (frame_width - 2) + "┐")
-
-#     for line in lines:
-#         spaces_needed = content_width - len(line)
-#         padded_line = f" {line}{' ' * spaces_needed} "
-#         result.append("│" + padded_line + "│")
-
-#     result.append("└" + "─" * (frame_width - 2) + "┘")
-#     return "\n".join(result)
 
 
 # class DBHose:
