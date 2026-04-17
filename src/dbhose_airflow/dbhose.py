@@ -9,9 +9,12 @@ from base_dumper import (
 )
 
 from .common import (
+    ColumnMeta,
     DQCheck,
     Error,
+    ETLInfo,
     MoveMethod,
+    TableMetadata,
     define_connector,
     define_dumper,
     define_query,
