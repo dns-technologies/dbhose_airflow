@@ -1,5 +1,9 @@
+from dataclasses import dataclass
 from enum import Enum
-from typing import NamedTuple
+from typing import (
+    Any,
+    NamedTuple,
+)
 
 
 class DQTest(NamedTuple):
@@ -39,3 +43,46 @@ class MoveMethod(MoveType, Enum):
     delete = MoveType("delete", True, True, False)
     replace = MoveType("replace", True, False, False)
     rewrite = MoveType("rewrite", False, False, False)
+
+
+class ColumnMeta(NamedTuple):
+    """Column structure."""
+
+    name: str
+    data_type: str
+    nullable: bool
+    has_default: bool
+    default_value: str | None
+    comment: str | None
+    position: int
+    type_oid: int | None
+    type_namespace: int | None
+    generated: str | None
+    identity: str | None
+
+
+class TableMetadata(NamedTuple):
+    """Table metadata structure."""
+
+    name: str
+    schema: str
+    owner: str | None
+    comment: str | None
+    columns: list[ColumnMeta]
+    partition_by: str | None
+    order_by: list[str] | None
+    primary_key: list[str] | None
+    engine: str
+    settings: dict[str, Any] | None
+    oid: int | None
+
+
+@dataclass
+class ETLInfo:
+    """Defines structure for ETL operations."""
+
+    name: str
+    ddl: str
+    transit_table: str
+    transit_ddl: str
+    table_metadata: TableMetadata

@@ -7,25 +7,31 @@ from .airflow_connect import (
 )
 from .ddl import generate_ddl
 from .defines import FROM_CONNTYPE
-from .enums import (
+from .structs import (
+    ColumnMeta,
     DQCheck,
     DQTest,
+    ETLInfo,
     MoveMethod,
     MoveType,
+    TableMetadata,
 )
 from .renders.frame import wrap_frame
-from text_io import (
+from .text_io import (
     define_query,
     logo,
 )
 
 
 __all__ = (
+    "ColumnMeta",
     "DQCheck",
     "DQTest",
     "Error",
+    "ETLInfo",
     "MoveMethod",
     "MoveType",
+    "TableMetadata",
     "define_connector",
     "define_dumper",
     "define_query",

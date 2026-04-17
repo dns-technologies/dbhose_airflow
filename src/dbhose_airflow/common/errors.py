@@ -5,6 +5,21 @@ from base_dumper import (
 )
 
 
-class DBHoseAirflowError(BaseDumperError): ...
-class DBHoseAirflowTypeError(DBHoseAirflowError, BaseDumperTypeError): ...
-class DBHoseAirflowValueError(DBHoseAirflowError, BaseDumperValueError): ...
+class DBHoseAirflowError(BaseDumperError):
+    """Base DBHose error."""
+
+
+class DBHoseAirflowTypeError(DBHoseAirflowError, BaseDumperTypeError):
+    """Type error."""
+
+
+class DBHoseAirflowValueError(DBHoseAirflowError, BaseDumperValueError):
+    """Value error."""
+
+
+class DBHoseAirflowErrorPermissionError(DBHoseAirflowError, PermissionError):
+    """Permission denied error."""
+
+
+class DBHoseAirflowErrorNotFoundError(DBHoseAirflowError, FileNotFoundError):
+    """Object not found error."""
