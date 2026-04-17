@@ -41,7 +41,6 @@ __all__ = (
     "MoveMethod",
     "TableMetadata",
     "Timeout",
-    "logo",
 )
 __author__ = "0xMihalich"
 __logo__ = logo()
