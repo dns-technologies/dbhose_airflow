@@ -714,11 +714,12 @@ pub fn postgres_ddl(
     let query = format!(
         r#"
         WITH c_rel AS (
-            SELECT c.oid
+        SELECT c.oid
             FROM pg_catalog.pg_class c
             JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
-            WHERE n.nspname = (pg_catalog.parse_ident('{}'))[1]
-            AND c.relname = (pg_catalog.parse_ident('{}'))[2]
+            WHERE n.nspname = COALESCE((pg_catalog.parse_ident('{}'))[1], 'public')
+            AND c.relname = COALESCE((pg_catalog.parse_ident('{}'))[2],
+            (pg_catalog.parse_ident('{}'))[1])
         )
         SELECT
             c.oid::int4,
@@ -829,6 +830,7 @@ pub fn postgres_ddl(
         LEFT JOIN pg_catalog.pg_am am ON c.relam = am.oid
         WHERE c.oid = (SELECT oid FROM c_rel)
         "#,
+        object_name.replace("'", "''"),
         object_name.replace("'", "''"),
         object_name.replace("'", "''"),
         if has_relallfrozen { "c.relallfrozen" } else { "0" },
