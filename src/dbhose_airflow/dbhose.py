@@ -35,35 +35,6 @@ from .common import (
 )
 
 
-def __init_conn(
-    connection: str | ConnectionConfig | None,
-    parent_config: ConnectionConfig | None = None,
-) -> ConnectionConfig | None:
-    """Connection initialization."""
-
-    if not connection:
-        return
-
-    if isinstance(connection, str):
-        if parent_config:
-            return ConnectionConfig(
-                connection,
-                parent_config.isolation,
-                parent_config.compression,
-                parent_config.compression_level,
-                parent_config.timeout,
-            )
-
-        return ConnectionConfig(connection)
-
-    if isinstance(connection, ConnectionConfig):
-        return connection
-
-    raise Error.DBHoseValueError(
-        "connector must be airflow_conn_id or ConnectionConfig struct"
-    )
-
-
 class DBHose:
     """DBHose ETL orchestrator."""
 
@@ -110,9 +81,9 @@ class DBHose:
 
         self.logger = log
         self.destination_table = destination_table
-        self.destination_conn = __init_conn(destination_conn)
-        self.source_conn = __init_conn(source_conn)
-        self.dq_extra_conn = __init_conn(dq_extra_conn, destination_conn)
+        self.destination_conn = self._init_conn(destination_conn)
+        self.source_conn = self._init_conn(source_conn)
+        self.dq_extra_conn = self._init_conn(dq_extra_conn, destination_conn)
         self.source_filter = source_filter or []
         self.staging = staging or StagingConfig()
         self.move_method = move_method
@@ -136,13 +107,42 @@ class DBHose:
 
             try:
                 self.create_staging()
-                dbhose_method(*args, **kwargs)
+                dbhose_method(self, *args, **kwargs)
                 self.run_dq_checks()
                 self.move_to_destination()
             finally:
                 self.drop_staging()
 
         return wrapper
+
+    @staticmethod
+    def _init_conn(
+        connection: str | ConnectionConfig | None,
+        parent_config: ConnectionConfig | None = None,
+    ) -> ConnectionConfig | None:
+        """Connection initialization."""
+
+        if not connection:
+            return
+
+        if isinstance(connection, str):
+            if parent_config:
+                return ConnectionConfig(
+                    connection,
+                    parent_config.isolation,
+                    parent_config.compression,
+                    parent_config.compression_level,
+                    parent_config.timeout,
+                )
+
+            return ConnectionConfig(connection)
+
+        if isinstance(connection, ConnectionConfig):
+            return connection
+
+        raise Error.DBHoseValueError(
+            "connector must be airflow_conn_id or ConnectionConfig struct"
+        )
 
     def _initialize(self) -> None:
         """Initialize connections and fetch ETL metadata."""
@@ -215,55 +215,6 @@ class DBHose:
                 "Check permissions.",
             )
 
-    def create_staging(self) -> None:
-        """Create staging table."""
-
-        if not self.staging.use_origin:
-            self.logger.info(wrap_frame(
-                f"Creating staging table {self.etl_info.staging_table}",
-            ))
-            self.dumper_dest.cursor.execute(self.etl_info.staging_ddl)
-            self.logger.info(wrap_frame(
-                f"Staging table {self.etl_info.staging_table} created",
-            ))
-
-    def drop_staging(self) -> None:
-        """Drop staging table if configured."""
-
-        if not self.staging.use_origin:
-            if not self.staging.drop_after:
-                return self.logger.warning(wrap_frame(
-                    "Staging table drop skipped by configuration",
-                ))
-
-            self.logger.info("Dropping staging table")
-            self.dumper_dest.cursor.execute(
-                f"DROP TABLE IF EXISTS {self.etl_info.staging_table}",
-            )
-            self.logger.info(wrap_frame(
-                f"Staging table {self.etl_info.staging_table} dropped",
-            ))
-
-    def move_to_destination(self) -> None:
-        """Move data from staging to destination table."""
-
-        if not self.staging.use_origin:
-            self.logger.info(wrap_frame(
-                f"Moving data using method: {self.move_method.name}",
-            ))
-            self._validate_move_requirements()
-
-            if self.move_method.is_custom:
-                self._execute_custom_move()
-            elif self.move_method.have_sql:
-                self._execute_sql_move()
-            else:
-                self._execute_direct_move()
-
-            self.logger.info(wrap_frame(
-                f"Data moved into {self.destination_table}",
-            ))
-
     def _validate_move_requirements(self) -> None:
         """Validate that all requirements for the move method are met."""
 
@@ -274,7 +225,7 @@ class DBHose:
 
         if self.move_method.is_custom and not self.custom_move_sql:
             raise Error.DBHoseValueError(
-                "You must specify custom query"
+                "You must specify custom query in custom_move_sql"
             )
 
         if self._is_unsupported_delete():
@@ -342,6 +293,55 @@ class DBHose:
             self.target_table,
             self.destination_table,
         )
+
+    def create_staging(self) -> None:
+        """Create staging table."""
+
+        if not self.staging.use_origin:
+            self.logger.info(wrap_frame(
+                f"Creating staging table {self.etl_info.staging_table}",
+            ))
+            self.dumper_dest.cursor.execute(self.etl_info.staging_ddl)
+            self.logger.info(wrap_frame(
+                f"Staging table {self.etl_info.staging_table} created",
+            ))
+
+    def drop_staging(self) -> None:
+        """Drop staging table if configured."""
+
+        if not self.staging.use_origin:
+            if not self.staging.drop_after:
+                return self.logger.warning(wrap_frame(
+                    "Staging table drop skipped by configuration",
+                ))
+
+            self.logger.info("Dropping staging table")
+            self.dumper_dest.cursor.execute(
+                f"DROP TABLE IF EXISTS {self.etl_info.staging_table}",
+            )
+            self.logger.info(wrap_frame(
+                f"Staging table {self.etl_info.staging_table} dropped",
+            ))
+
+    def move_to_destination(self) -> None:
+        """Move data from staging to destination table."""
+
+        if not self.staging.use_origin:
+            self.logger.info(wrap_frame(
+                f"Moving data using method: {self.move_method.name}",
+            ))
+            self._validate_move_requirements()
+
+            if self.move_method.is_custom:
+                self._execute_custom_move()
+            elif self.move_method.have_sql:
+                self._execute_sql_move()
+            else:
+                self._execute_direct_move()
+
+            self.logger.info(wrap_frame(
+                f"Data moved into {self.destination_table}",
+            ))
 
     def run_dq_checks(self) -> None:
         """Run configured Data Quality checks."""
