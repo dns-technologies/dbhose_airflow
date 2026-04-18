@@ -277,7 +277,6 @@ class DBHose:
         for query in sum(chunk_query(move_query), []):
             self.dumper_dest.cursor.execute(query)
 
-
     def _get_move_query(self) -> str:
         """Fetch and validate the SQL query for the move method."""
 
@@ -300,7 +299,6 @@ class DBHose:
 
         return query
 
-
     def _execute_direct_move(self) -> None:
         """Execute direct data move (APPEND, REWRITE)."""
 
@@ -314,6 +312,222 @@ class DBHose:
             self.target_table,
             self.destination_table,
         )
+
+    def _run_single_check(self, dq_check: DQCheck) -> None:
+        """Run a single DQ check."""
+
+        if self._should_skip_check(dq_check):
+            return
+
+        try:
+            if dq_check.need_source_table:
+                self._run_comparison_check(dq_check)
+            else:
+                self._run_standalone_check(dq_check)
+
+            self.logger.info(wrap_frame(f"{dq_check.description} test Pass"))
+        except Error.DBHoseValueError as error:
+            raise error
+        except Exception as error:
+            self.logger.error(wrap_frame(
+                f"{dq_check.description} test Fail: {error}",
+            ))
+            raise Error.DBHoseError(str(error))
+
+    def _should_skip_check(self, dq_check: DQCheck) -> bool:
+        """Check if DQ test should be skipped."""
+
+        if dq_check.name in self.dq.disabled_checks:
+            self.logger.warning(wrap_frame(
+                f"{dq_check.description} test skipped by user",
+            ))
+            return True
+
+        if dq_check.need_source_table and not self.dq.comparison_table:
+            self.logger.warning(wrap_frame(
+                f"{dq_check.description} test skipped [no comparison object]",
+            ))
+            return True
+
+        return False
+
+    def _run_comparison_check(self, dq_check: DQCheck) -> None:
+        """Run check comparing source and destination tables."""
+
+        if dq_check.generate_queryes:
+            self._run_comparison_with_generated_queries(dq_check)
+        else:
+            self._run_comparison_single_query(dq_check)
+
+    def _run_standalone_check(self, dq_check: DQCheck) -> None:
+        """Run check on destination table only."""
+
+        if dq_check.generate_queryes:
+            self._run_standalone_with_generated_queries(dq_check)
+        else:
+            self._run_standalone_single_query(dq_check)
+
+    def _run_comparison_with_generated_queries(
+        self,
+        dq_check: DQCheck,
+    ) -> None:
+        """Run comparison check with dynamically generated queries."""
+
+        query_src = define_query(self.dumper_dq.dbname, dq_check)
+        query_dest = define_query(self.dumper_dest.dbname, dq_check)
+        tests_src = self._fetch_tests(
+            self.dumper_dq,
+            query_src,
+            self.dq.comparison_table,
+        )
+
+        if not self._has_tests(tests_src):
+            return self.logger.warning(wrap_frame(
+                f"{dq_check.description} test Skip [no data types for test]",
+            ))
+
+        tests_dest = self._fetch_tests(
+            self.dumper_dest,
+            query_dest,
+            self.target_table,
+        )
+
+        for (_, column_src, test_src) in tests_src:
+            column_dest = self.dq.column_mapping.get(column_src, column_src)
+
+            if column_dest in self.dq.exclude_columns:
+                self.logger.warning(wrap_frame(
+                    f"Check column \"{column_dest}\" test skipped by user",
+                ))
+                continue
+
+            matching_test = self._find_matching_test(tests_dest, column_dest)
+
+            if matching_test:
+                self._compare_values(
+                    self.dumper_dq,
+                    test_src,
+                    self.dumper_dest,
+                    matching_test,
+                    column_src,
+                )
+            else:
+                self.logger.warning(wrap_frame(
+                    f"Check column \"{column_src}\" test "
+                    "Skip [no column for test]",
+                ))
+
+    def _run_comparison_single_query(self, dq_check: DQCheck) -> None:
+        """Run comparison check with a single query."""
+
+        query_src = define_query(self.dumper_dq.dbname, dq_check).format(
+            table=self.dq.comparison_table,
+        )
+        query_dest = define_query(self.dumper_dest.dbname, dq_check).format(
+            table=self.target_table,
+        )
+        value_src = self._fetch_single_value(self.dumper_dq, query_src)
+        value_dest = self._fetch_single_value(self.dumper_dest, query_dest)
+
+        if value_src != value_dest:
+            raise Error.DBHoseValueError(
+                f"{dq_check.description} test Fail: "
+                "value {value_src} <> {value_dest}"
+            )
+
+    def _run_standalone_with_generated_queries(
+        self,
+        dq_check: DQCheck,
+    ) -> None:
+        """Run standalone check with dynamically generated queries."""
+
+        query_dest = define_query(self.dumper_dest.dbname, dq_check)
+        tests = self._fetch_tests(
+            self.dumper_dest,
+            query_dest,
+            self.target_table,
+        )
+
+        for (have_test, column_name, query) in tests:
+            if not have_test:
+                self.logger.warning(wrap_frame(
+                    f"{dq_check.description} test Skip [no column for test]",
+                ))
+                break
+
+            self._check_single_column(column_name, query)
+
+    def _run_standalone_single_query(self, dq_check: DQCheck) -> None:
+        """Run standalone check with a single query."""
+
+        query_dest = define_query(self.dumper_dest.dbname, dq_check).format(
+            table=self.target_table,
+        )
+        value, result = self._fetch_single_value(self.dumper_dest, query_dest)
+
+        if result == "Fail":
+            raise Error.DBHoseValueError(
+                f"{dq_check.description} test Fail with {value} error rows"
+            )
+
+    def _fetch_tests(self, dumper: DumperType, query: str, table: str) -> list:
+        """Fetch generated test queries."""
+
+        reader = dumper.to_reader(query.format(table=table))
+        return list(reader.to_rows())
+
+    def _has_tests(self, tests: list) -> bool:
+        """Check if any tests were generated."""
+
+        return bool(tests) and bool(next(iter(tests)))
+
+    def _find_matching_test(self, tests: list, column_name: str) -> str | None:
+        """Find test query for a specific column."""
+
+        for (_, col, test) in tests:
+            if col == column_name:
+                return test
+
+    def _compare_values(
+        self,
+        dumper_src: DumperType,
+        query_src: str,
+        dumper_dest: DumperType,
+        query_dest: str,
+        column_name: str,
+    ) -> None:
+        """Compare values from source and destination."""
+
+        value_src = self._fetch_single_value(dumper_src, query_src)
+        value_dest = self._fetch_single_value(dumper_dest, query_dest)
+
+        if value_src != value_dest:
+            raise Error.DBHoseValueError(
+                f"Check column \"{column_name}\" test Fail: "
+                f"value {value_src} <> {value_dest}",
+            )
+
+        self.logger.info(wrap_frame(f'Check column "{column_name}" test Pass'))
+
+    def _check_single_column(self, column_name: str, query: str) -> None:
+        """Check a single column with generated query."""
+
+        reader = self.dumper_dest.to_reader(query)
+        value, result = next(iter(reader.to_rows()))
+
+        if result == "Fail":
+            raise Error.DBHoseValueError(
+                f"Check column \"{column_name}\" test "
+                f"Fail with {value} error rows",
+            )
+
+        self.logger.info(wrap_frame(f'Check column "{column_name}" test Pass'))
+
+    def _fetch_single_value(self, dumper: DumperType, query: str) -> tuple:
+        """Fetch a single value from query result."""
+
+        reader = dumper.to_reader(query)
+        return next(iter(reader.to_rows()))[0]
 
     def create_staging(self) -> None:
         """Create staging table."""
@@ -367,165 +581,15 @@ class DBHose:
     def run_dq_checks(self) -> None:
         """Run configured Data Quality checks."""
 
-        if not self.dq:
-            return self.logger.info("No DQ checks configured, skipping")
-
         self.logger.info(wrap_frame("Running Data Quality checks"))
 
-        for dq_check in DQCheck._member_names_:
-            dq = DQCheck[dq_check]
+        for check_name in DQCheck._member_names_:
+            dq_check = DQCheck[check_name]
+            self._run_single_check(dq_check)
 
-            if dq in self.dq.disabled_checks:
-                self.logger.warning(
-                    wrap_frame(f"{dq.description} test skipped by user")
-                )
-                continue
-
-            if dq.need_source_table and not self.dq.comparison_table:
-                self.logger.warning(
-                    wrap_frame(
-                        f"{dq.description} test skipped [no comparison object]"
-                    ),
-                )
-                continue
-
-            query_dest = define_query(self.dumper_dest.dbname, dq)
-
-            if dq.need_source_table:
-                query_src = define_query(self.dumper_dq.dbname, dq)
-
-                if dq.generate_queryes:
-                    reader_src = self.dumper_dq.to_reader(
-                        query_src.format(table=self.dq.comparison_table),
-                    )
-                    tests_src = list(reader_src.to_rows())
-                    have_test = next(iter(tests_src))
-
-                    if not have_test:
-                        self.logger.warning(
-                            wrap_frame(f"{dq.description} test Skip "
-                            "[no data types for test]"),
-                        )
-                        continue
-
-                    reader_dest = self.dumper_dest.to_reader(
-                        query_dest.format(table=self.target_table),
-                    )
-                    tests_dest = list(reader_dest.to_rows())
-
-                    for (_, column_src, test_src) in tests_src:
-                        column_dq = self.dq.column_mapping.get(
-                            column_src,
-                            column_src,
-                        )
-
-                        if column_dq in self.dq.exclude_columns:
-                            self.logger.warning(wrap_frame(
-                                f"Check column \"{column_dq}\" "
-                                "test skipped by user",
-                            ))
-                            continue
-
-                        for (_, column_dest, test_dest) in tests_dest:
-
-                            if column_dq == column_dest:
-                                reader_src = self.dumper_dq.to_reader(test_src)
-                                reader_dest = self.dumper_dest.to_reader(
-                                    test_dest,
-                                )
-                                value_src = next(iter(*reader_src.to_rows()))
-                                value_dst = next(iter(*reader_dest.to_rows()))
-
-                                if value_src != value_dst:
-                                    err_msg = (
-                                        f"Check column \"{column_src}\" test "
-                                        f"Fail: value {value_src} "
-                                        f"<> {value_dst}"
-                                    )
-                                    self.logger.error(wrap_frame(err_msg))
-                                    raise Error.DBHoseValueError(err_msg)
-
-                                self.logger.info(
-                                    wrap_frame(
-                                        f"Check column \"{column_src}\" "
-                                        "test Pass",
-                                    ),
-                                )
-                                break
-                        else:
-                            self.logger.warning(
-                                wrap_frame(
-                                    f"Check column \"{column_src}\" test Skip "
-                                    "[no column for test]",
-                                ),
-                            )
-                else:
-                    reader_src = self.dumper_dq.to_reader(
-                        query_src.format(table=self.dq.comparison_table),
-                    )
-                    reader_dest = self.dumper_dest.to_reader(
-                        query_dest.format(table=self.target_table),
-                    )
-                    value_src = next(iter(reader_src.to_rows()))[0]
-                    value_dst = next(iter(reader_dest.to_rows()))[0]
-
-                    if value_src != value_dst:
-                        err_msg = (
-                            f"{dq.description} test Fail: "
-                            f"value {value_src} <> {value_dst}"
-                        )
-                        self.logger.error(wrap_frame(err_msg))
-                        raise Error.DBHoseValueError(err_msg)
-
-            else:
-                reader_dest = self.dumper_dest.to_reader(
-                    query_dest.format(table=self.target_table),
-                )
-
-                if dq.generate_queryes:
-                    tests = list(reader_dest.to_rows())
-
-                    for (have_test, column_name, query) in tests:
-
-                        if not have_test:
-                            self.logger.warning(
-                                wrap_frame(f"{dq.description} test Skip "
-                                "[no column for test]"),
-                            )
-                            break
-
-                        reader_dest = self.dumper_dest.to_reader(query)
-                        value, result = next(iter(reader_dest.to_rows()))
-
-                        if result == "Fail":
-                            err_msg = (
-                                f"Check column \"{column_name}\" test Fail "
-                                f"with {value} error rows"
-                            )
-                            self.logger.error(wrap_frame(err_msg))
-                            raise Error.DBHoseValueError(err_msg)
-
-                        self.logger.info(
-                            wrap_frame(
-                                f"Check column \"{column_name}\" test Pass",
-                            ),
-                        )
-                else:
-                    value, result = next(iter(reader_dest.to_rows()))
-
-                    if result == "Fail":
-                        err_msg = (
-                            f"{dq.description} test Fail "
-                            f"with {value} error rows"
-                        )
-                        self.logger.error(wrap_frame(err_msg))
-                        raise Error.DBHoseValueError(err_msg)
-
-            self.logger.info(wrap_frame(f"{dq.description} test Pass"))
-
-        self.logger.info(
-            wrap_frame("All Data Quality tests have been completed")
-        )
+        self.logger.info(wrap_frame(
+            "All Data Quality tests have been completed"
+        ))
 
     @etl_pipeline
     def from_dbms(
