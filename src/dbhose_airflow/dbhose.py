@@ -111,7 +111,7 @@ class DBHose:
         - Staging table cleanup (unless drop_after=False)
         """
 
-        def wrapper(self: DBHose, *args, **kwargs) -> None:
+        def wrapper(self: "DBHose", *args, **kwargs) -> None:
 
             try:
                 self.create_staging()
