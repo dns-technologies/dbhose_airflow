@@ -115,6 +115,7 @@ class StagingConfig:
 
     drop_after: bool = True
     random_suffix: bool = True
+    use_origin: bool = False
 
 
 @dataclass
@@ -124,7 +125,6 @@ class DQConfig:
     disabled_checks: list[str] = field(default_factory=list)
     custom_queries: list[str] = field(default_factory=list)
     exclude_columns: list[str] = field(default_factory=list)
-    external_conn_id: str | None = None
     comparison_table: str | None = None
     column_mapping: dict[str, str] | None = None
     use_source_conn: bool = False
