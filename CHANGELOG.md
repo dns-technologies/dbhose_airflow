@@ -7,7 +7,30 @@
 * Add depends dr-herriot==0.1.0.dev0
 * Update depends native-dumper==0.3.7.dev3
 * Update depends pgpack-dumper==0.3.7.dev3
-* Add Rust core for generate DDLs
+* Add Rust core `ddl_core` for generating DDLs from PostgreSQL, Greenplum, and ClickHouse
+* Add `generate_ddl()` function returning `ETLInfo` with full table metadata
+* Add `TableMetadata` and `ColumnMeta` unified structures for cross-DBMS compatibility
+* Add `ConnectionConfig` dataclass for connection configuration
+* Add `StagingConfig` dataclass for staging table behavior
+* Add `DQConfig` dataclass for Data Quality check configuration
+* Add `MoveMethod` enum with `append`, `replace`, `delete`, `rewrite`, `custom` strategies
+* Add `DQCheck` enum with `empty`, `uniq`, `future`, `infinity`, `nan`, `total`, `sum` checks
+* Add `@etl_pipeline` decorator for automated staging lifecycle management
+* Add `DBHose` ETL orchestrator class with `from_dbms`, `from_file`, `from_iterable`, `from_frame` methods
+* Add automatic dump format detection (BINARY/CSV) based on source/destination compatibility
+* Add PostgreSQL/Greenplum version detection supporting 9.2 through 18+
+* Add Greenplum-specific features: `DISTRIBUTED BY`, `USING` access method, `WITH` reloptions
+* Add ClickHouse DDL parser with support for `MergeTree`, `ReplicatedMergeTree`, `View`, `MaterializedView`, `Dictionary`
+* Add ClickHouse type parsing: `Array`, `Map`, `Tuple`, `Nullable`, `LowCardinality`, `DateTime64`, `FixedString`
+* Add ACL parsing and `GRANT` statement generation for PostgreSQL
+* Add staging table generation with `UNLOGGED` for PostgreSQL and `MergeTree` for ClickHouse
+* Add cross-platform column metadata normalization between PostgreSQL and ClickHouse
+* Add comprehensive error hierarchy: `DBHoseError`, `DBHoseValueError`, `DBHoseTypeError`, `DBHoseNotFoundError`, `DBHosePermissionError`
+* Add `define_query()` function for loading SQL templates from filesystem
+* Add ASCII art logo banner on initialization
+* Add `wrap_frame()` utility for visual log framing
+* Update `README.md` with complete API documentation and usage examples
+* Add `AI_ASSISTANT_CONTRIBUTION.md` documenting collaborative development
 
 ## 0.1.0.7
 
