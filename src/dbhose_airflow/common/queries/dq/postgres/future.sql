@@ -33,7 +33,7 @@ left join (
       , c.relname::text as table_name
       , format(
             e'select count(*) as value, case when count(*) = 0 then ''Pass'' else ''Fail'' end as result \n' ||
-            e'from %I.%I where %I > (current_date + interval ''1 month'')'
+            e'from %I.%I where "%I" > (current_date + interval ''1 month'')'
           , n.nspname
           , c.relname
           , a.attname

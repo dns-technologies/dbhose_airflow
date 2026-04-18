@@ -36,7 +36,7 @@ left join (
       , c.relname::text as table_name
       , format(
             E'select count(*) as value, case when count(*) = 0 then ''Pass'' else ''Fail'' end as result \n' ||
-            E'from %I.%I where %I in (''infinity'', ''-infinity'')'
+            E'from %I.%I where "%I" in (''infinity'', ''-infinity'')'
           , n.nspname
           , c.relname
           , a.attname
