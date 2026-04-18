@@ -36,7 +36,7 @@ left join (
       , n.nspname::text as schema_name
       , c.relname::text as table_name
       , format(
-            E'select round(sum(coalesce(%I::numeric, 0)), 2) as value \n' ||
+            E'select round(sum(coalesce("%I"::numeric, 0)), 2) as value \n' ||
             E'from %I.%I'
           , a.attname
           , n.nspname

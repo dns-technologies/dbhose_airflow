@@ -22,7 +22,7 @@ left join (
             'select count(*) as value, if(count() = 0, ''Pass'', ''Fail'') as result \n' ||
             'from {{}} where {{}} > addMonths(today(), 1)'
           , table_name
-          , column_name
+          , concat('`', column_name, '`')
         ) as query
       , database
       , table

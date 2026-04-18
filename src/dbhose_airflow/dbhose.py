@@ -21,6 +21,7 @@ from polars import (
 
 from .common import (
     ConnectionConfig,
+    DQCheck,
     DQConfig,
     StagingConfig,
     Error,
@@ -114,6 +115,9 @@ class DBHose:
 
             try:
                 self.create_staging()
+                self.logger.info(wrap_frame(
+                    f"Loading data to {self.target_table} table"
+                ))
                 dbhose_method(self, *args, **kwargs)
                 self.run_dq_checks()
                 self.move_to_destination()
@@ -196,6 +200,10 @@ class DBHose:
                 self.mode,
                 self.dump_format,
             )
+        elif self.dq.use_source_conn:
+            self.dumper_dq = self.dumper_src
+        else:
+            self.dumper_dq = self.dumper_dest
 
         self.logger.info("Fetching ETL metadata from destination server")
         self.etl_info = generate_ddl(
@@ -206,15 +214,9 @@ class DBHose:
 
         if self.dq.comparison_table:
             self.logger.info("Fetching metadata for comparison table")
-            dq_dumper = (
-                self.dumper_src
-                if self.dq.use_source_conn and self.dumper_src
-                else self.dumper_dest
-            )
-            comparsion_dumper = self.dumper_dq or dq_dumper
             self.comparison_metadata = generate_ddl(
                 self.dq.comparison_table,
-                comparsion_dumper.cursor,
+                self.dumper_dq.cursor,
                 skip_staging=True,
             )
 
@@ -369,7 +371,148 @@ class DBHose:
             return self.logger.info("No DQ checks configured, skipping")
 
         self.logger.info(wrap_frame("Running Data Quality checks"))
-        # ... логика DQ проверок ...
+
+        for test in DQCheck._member_names_:
+            dq = DQCheck[test]
+
+            if test in self.dq.disabled_checks:
+                self.logger.warning(
+                    wrap_frame(f"{dq.description} test skipped by user")
+                )
+                continue
+
+            if dq.need_source_table and not self.dq.comparison_table:
+                self.logger.warning(
+                    wrap_frame(
+                        f"{dq.description} test skipped [no comparison object]"
+                    ),
+                )
+                continue
+
+            query_dest = define_query(self.dumper_dest.dbname, dq)
+
+            if dq.need_source_table:
+                query_src = define_query(self.dumper_dq.dbname, dq)
+
+                if dq.generate_queryes:
+                    reader_src = self.dumper_dq.to_reader(
+                        query_src.format(table=self.dq.comparison_table),
+                    )
+                    tests_src = list(reader_src.to_rows())
+                    have_test = next(iter(tests_src))
+
+                    if not have_test:
+                        self.logger.warning(
+                            wrap_frame(f"{dq.description} test Skip "
+                            "[no data types for test]"),
+                        )
+                        continue
+
+                    reader_dest = self.dumper_dest.to_reader(
+                        query_dest.format(table=self.target_table),
+                    )
+                    tests_dest = list(reader_dest.to_rows())
+
+                    for (_, column_src, test_src) in tests_src:
+                        for (_, column_dest, test_dest) in tests_dest:
+                            if column_src == column_dest:
+                                reader_src = self.dumper_dq.to_reader(test_src)
+                                reader_dest = self.dumper_dest.to_reader(
+                                    test_dest,
+                                )
+                                value_src = next(iter(*reader_src.to_rows()))
+                                value_dst = next(iter(*reader_dest.to_rows()))
+
+                                if value_src != value_dst:
+                                    err_msg = (
+                                        f"Check column {column_src} test "
+                                        f"Fail: value {value_src} "
+                                        f"<> {value_dst}"
+                                    )
+                                    self.logger.error(wrap_frame(err_msg))
+                                    raise ValueError(err_msg)
+
+                                self.logger.info(
+                                    wrap_frame(
+                                        f"Check column \"{column_src}\" "
+                                        "test Pass",
+                                    ),
+                                )
+                                break
+                        else:
+                            self.logger.warning(
+                                wrap_frame(
+                                    f"Check column \"{column_src}\" test Skip "
+                                    "[no column for test]",
+                                ),
+                            )
+#                 else:
+#                     reader_src = dumper_src.to_reader(
+#                         query_src.format(table=table),
+#                     )
+#                     reader_dest = self.dumper_dest.to_reader(
+#                         query_dest.format(table=self.table_temp),
+#                     )
+#                     value_src = next(iter(reader_src.to_rows()))[0]
+#                     value_dst = next(iter(reader_dest.to_rows()))[0]
+
+#                     if value_src != value_dst:
+#                         err_msg = (
+#                             f"{dq.description} test Fail: "
+#                             f"value {value_src} <> {value_dst}"
+#                         )
+#                         self.logger.error(wrap_frame(err_msg))
+#                         raise ValueError(err_msg)
+
+#             else:
+#                 reader_dest = self.dumper_dest.to_reader(
+#                     query_dest.format(table=self.table_temp),
+#                 )
+
+#                 if dq.generate_queryes:
+#                     tests = list(reader_dest.to_rows())
+
+#                     for (have_test, column_name, query) in tests:
+
+#                         if not have_test:
+#                             self.logger.warning(
+#                                 wrap_frame(f"{dq.description} test Skip "
+#                                 "[no column for test]"),
+#                             )
+#                             break
+
+#                         reader_dest = self.dumper_dest.to_reader(query)
+#                         value, result = next(iter(reader_dest.to_rows()))
+
+#                         if result == "Fail":
+#                             err_msg = (
+#                                 f"Check column {column_name} test Fail "
+#                                 f"with {value} error rows"
+#                             )
+#                             self.logger.error(wrap_frame(err_msg))
+#                             raise ValueError(err_msg)
+
+#                         self.logger.info(
+#                             wrap_frame(
+#                                 f"Check column {column_name} test Pass",
+#                             ),
+#                         )
+#                 else:
+#                     value, result = next(iter(reader_dest.to_rows()))
+
+#                     if result == "Fail":
+#                         err_msg = (
+#                             f"{dq.description} test Fail "
+#                             f"with {value} error rows"
+#                         )
+#                         self.logger.error(wrap_frame(err_msg))
+#                         raise ValueError(err_msg)
+
+            self.logger.info(wrap_frame(f"{dq.description} test Pass"))
+
+        self.logger.info(
+            wrap_frame("All Data Quality tests have been completed")
+        )
 
     @etl_pipeline
     def from_dbms(
@@ -379,25 +522,12 @@ class DBHose:
     ) -> None:
         """Upload from DBMS."""
 
-        self.logger.info(wrap_frame(
-            f"Loading data to {self.target_table} table"
-        ))
         self.dumper_dest.write_between(
             self.target_table,
             table,
             query,
             self.dumper_src,
         )
-
-    @etl_pipeline
-    def from_file(
-        self,
-        fileobj: BufferedReader,
-    ) -> None:
-        """Upload from any dump file object."""
-
-        # TODO. author 0xMihalich Add dr_herriot
-        self.dumper_dest.write_dump(fileobj, self.target_table)
 
     @etl_pipeline
     def from_iterable(
@@ -409,12 +539,23 @@ class DBHose:
         self.dumper_dest.from_rows(dtype_data, self.target_table)
 
     @etl_pipeline
+    def from_file(
+        self,
+        fileobj: BufferedReader,
+    ) -> None:
+        """Upload from any dump file object."""
+
+        # TODO. Add dr_herriot author 0xMihalich
+        self.dumper_dest.write_dump(fileobj, self.target_table)
+
+    @etl_pipeline
     def from_frame(
         self,
         data_frame: PdFrame | PlFrame | LfFrame,
     ) -> None:
         """Upload from DataFrame."""
 
+        # TODO. Add dr_herriot author 0xMihalich
         if data_frame.__class__ is PdFrame:
             return self.dumper_dest.from_pandas(data_frame, self.target_table)
 

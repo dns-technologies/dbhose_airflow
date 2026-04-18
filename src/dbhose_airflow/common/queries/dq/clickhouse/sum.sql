@@ -40,7 +40,7 @@ left join (
       , format(
             'select round(sum({{}}), 2) as value \n' ||
             'from {{}}'
-          , column_name
+          , concat('`', column_name, '`')
           , table_name
         ) as query
       , database
