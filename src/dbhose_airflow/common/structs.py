@@ -122,9 +122,9 @@ class StagingConfig:
 class DQConfig:
     """Configuration for Data Quality checks."""
 
-    disabled_checks: list[str] = field(default_factory=list)
+    disabled_checks: list[DQCheck] = field(default_factory=list)
     custom_queries: list[str] = field(default_factory=list)
     exclude_columns: list[str] = field(default_factory=list)
+    column_mapping: dict[str, str] = field(default_factory=dict)
     comparison_table: str | None = None
-    column_mapping: dict[str, str] | None = None
     use_source_conn: bool = False

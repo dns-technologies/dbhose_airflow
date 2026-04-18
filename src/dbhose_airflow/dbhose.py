@@ -372,10 +372,10 @@ class DBHose:
 
         self.logger.info(wrap_frame("Running Data Quality checks"))
 
-        for test in DQCheck._member_names_:
-            dq = DQCheck[test]
+        for dq_check in DQCheck._member_names_:
+            dq = DQCheck[dq_check]
 
-            if test in self.dq.disabled_checks:
+            if dq in self.dq.disabled_checks:
                 self.logger.warning(
                     wrap_frame(f"{dq.description} test skipped by user")
                 )
@@ -414,8 +414,21 @@ class DBHose:
                     tests_dest = list(reader_dest.to_rows())
 
                     for (_, column_src, test_src) in tests_src:
+                        column_dq = self.dq.column_mapping.get(
+                            column_src,
+                            column_src,
+                        )
+
+                        if column_dq in self.dq.exclude_columns:
+                            self.logger.warning(wrap_frame(
+                                f"Check column \"{column_dq}\" "
+                                "test skipped by user",
+                            ))
+                            continue
+
                         for (_, column_dest, test_dest) in tests_dest:
-                            if column_src == column_dest:
+
+                            if column_dq == column_dest:
                                 reader_src = self.dumper_dq.to_reader(test_src)
                                 reader_dest = self.dumper_dest.to_reader(
                                     test_dest,
@@ -425,12 +438,12 @@ class DBHose:
 
                                 if value_src != value_dst:
                                     err_msg = (
-                                        f"Check column {column_src} test "
+                                        f"Check column \"{column_src}\" test "
                                         f"Fail: value {value_src} "
                                         f"<> {value_dst}"
                                     )
                                     self.logger.error(wrap_frame(err_msg))
-                                    raise ValueError(err_msg)
+                                    raise Error.DBHoseValueError(err_msg)
 
                                 self.logger.info(
                                     wrap_frame(
@@ -446,67 +459,67 @@ class DBHose:
                                     "[no column for test]",
                                 ),
                             )
-#                 else:
-#                     reader_src = dumper_src.to_reader(
-#                         query_src.format(table=table),
-#                     )
-#                     reader_dest = self.dumper_dest.to_reader(
-#                         query_dest.format(table=self.table_temp),
-#                     )
-#                     value_src = next(iter(reader_src.to_rows()))[0]
-#                     value_dst = next(iter(reader_dest.to_rows()))[0]
+                else:
+                    reader_src = self.dumper_dq.to_reader(
+                        query_src.format(table=self.dq.comparison_table),
+                    )
+                    reader_dest = self.dumper_dest.to_reader(
+                        query_dest.format(table=self.target_table),
+                    )
+                    value_src = next(iter(reader_src.to_rows()))[0]
+                    value_dst = next(iter(reader_dest.to_rows()))[0]
 
-#                     if value_src != value_dst:
-#                         err_msg = (
-#                             f"{dq.description} test Fail: "
-#                             f"value {value_src} <> {value_dst}"
-#                         )
-#                         self.logger.error(wrap_frame(err_msg))
-#                         raise ValueError(err_msg)
+                    if value_src != value_dst:
+                        err_msg = (
+                            f"{dq.description} test Fail: "
+                            f"value {value_src} <> {value_dst}"
+                        )
+                        self.logger.error(wrap_frame(err_msg))
+                        raise Error.DBHoseValueError(err_msg)
 
-#             else:
-#                 reader_dest = self.dumper_dest.to_reader(
-#                     query_dest.format(table=self.table_temp),
-#                 )
+            else:
+                reader_dest = self.dumper_dest.to_reader(
+                    query_dest.format(table=self.target_table),
+                )
 
-#                 if dq.generate_queryes:
-#                     tests = list(reader_dest.to_rows())
+                if dq.generate_queryes:
+                    tests = list(reader_dest.to_rows())
 
-#                     for (have_test, column_name, query) in tests:
+                    for (have_test, column_name, query) in tests:
 
-#                         if not have_test:
-#                             self.logger.warning(
-#                                 wrap_frame(f"{dq.description} test Skip "
-#                                 "[no column for test]"),
-#                             )
-#                             break
+                        if not have_test:
+                            self.logger.warning(
+                                wrap_frame(f"{dq.description} test Skip "
+                                "[no column for test]"),
+                            )
+                            break
 
-#                         reader_dest = self.dumper_dest.to_reader(query)
-#                         value, result = next(iter(reader_dest.to_rows()))
+                        reader_dest = self.dumper_dest.to_reader(query)
+                        value, result = next(iter(reader_dest.to_rows()))
 
-#                         if result == "Fail":
-#                             err_msg = (
-#                                 f"Check column {column_name} test Fail "
-#                                 f"with {value} error rows"
-#                             )
-#                             self.logger.error(wrap_frame(err_msg))
-#                             raise ValueError(err_msg)
+                        if result == "Fail":
+                            err_msg = (
+                                f"Check column \"{column_name}\" test Fail "
+                                f"with {value} error rows"
+                            )
+                            self.logger.error(wrap_frame(err_msg))
+                            raise Error.DBHoseValueError(err_msg)
 
-#                         self.logger.info(
-#                             wrap_frame(
-#                                 f"Check column {column_name} test Pass",
-#                             ),
-#                         )
-#                 else:
-#                     value, result = next(iter(reader_dest.to_rows()))
+                        self.logger.info(
+                            wrap_frame(
+                                f"Check column \"{column_name}\" test Pass",
+                            ),
+                        )
+                else:
+                    value, result = next(iter(reader_dest.to_rows()))
 
-#                     if result == "Fail":
-#                         err_msg = (
-#                             f"{dq.description} test Fail "
-#                             f"with {value} error rows"
-#                         )
-#                         self.logger.error(wrap_frame(err_msg))
-#                         raise ValueError(err_msg)
+                    if result == "Fail":
+                        err_msg = (
+                            f"{dq.description} test Fail "
+                            f"with {value} error rows"
+                        )
+                        self.logger.error(wrap_frame(err_msg))
+                        raise Error.DBHoseValueError(err_msg)
 
             self.logger.info(wrap_frame(f"{dq.description} test Pass"))
 
