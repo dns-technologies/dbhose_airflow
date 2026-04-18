@@ -1,8 +1,22 @@
+from collections.abc import Iterable
+from io import BufferedReader
+from typing import (
+    Any,
+    Callable,
+)
+
 from airflow.hooks.base import log
 from base_dumper import (
     DumperMode,
     DumperType,
     DumpFormat,
+    chunk_query,
+)
+from native_dumper import NativeDumper
+from pandas import DataFrame as PdFrame
+from polars import (
+    DataFrame as PlFrame,
+    LazyFrame as LfFrame,
 )
 
 from .common import (
@@ -14,6 +28,7 @@ from .common import (
     MoveMethod,
     TableMetadata,
     define_dumper,
+    define_query,
     generate_ddl,
     logo,
     wrap_frame,
@@ -57,7 +72,7 @@ class DBHose:
         destination_table: str,
         destination_conn: str | ConnectionConfig,
         source_conn: str | ConnectionConfig | None = None,
-        dq_object_conn: str | ConnectionConfig | None = None,
+        dq_extra_conn: str | ConnectionConfig | None = None,
         *,
         source_filter: list[str] | None = None,
         staging: StagingConfig | None = None,
@@ -76,8 +91,8 @@ class DBHose:
                               or configuration
             source_conn: Source connection airflow_conn_id or
                          configuration (if None, destination is used)
-            dq_object_conn: DQ object external connection
-                            airflow_conn_id or configuration or None
+            dq_extra_conn: DQ object external connection
+                           airflow_conn_id or configuration or None
             source_filter: List of WHERE conditions for source query
             staging: Staging table configuration
             move_method: Method for moving data from staging to destination
@@ -97,7 +112,7 @@ class DBHose:
         self.destination_table = destination_table
         self.destination_conn = __init_conn(destination_conn)
         self.source_conn = __init_conn(source_conn)
-        self.dq_object_conn = __init_conn(dq_object_conn, destination_conn)
+        self.dq_extra_conn = __init_conn(dq_extra_conn, destination_conn)
         self.source_filter = source_filter or []
         self.staging = staging or StagingConfig()
         self.move_method = move_method
@@ -112,6 +127,22 @@ class DBHose:
         self.target_table: str | None = None
         self.comparison_metadata: TableMetadata | None = None
         self._initialize()
+
+    @staticmethod
+    def with_staging_table(dbhose_method: Callable) -> Callable:
+        """Decorator to manage staging table lifecycle."""
+
+        def wrapper(self: DBHose, *args, **kwargs) -> None:
+
+            try:
+                self.create_staging()
+                dbhose_method(*args, **kwargs)
+                self.run_dq_checks()
+                self.move_to_destination()
+            finally:
+                self.drop_staging()
+
+        return wrapper
 
     def _initialize(self) -> None:
         """Initialize connections and fetch ETL metadata."""
@@ -137,12 +168,12 @@ class DBHose:
                 self.dump_format,
             )
 
-        if self.dq_object_conn:
+        if self.dq_extra_conn:
             self.dumper_dq = define_dumper(
-                self.dq_object_conn.conn_id,
-                self.dq_object_conn.compression_level,
-                self.dq_object_conn.timeout,
-                self.dq_object_conn.isolation,
+                self.dq_extra_conn.conn_id,
+                self.dq_extra_conn.compression_level,
+                self.dq_extra_conn.timeout,
+                self.dq_extra_conn.isolation,
                 self.mode,
                 self.dump_format,
             )
@@ -220,7 +251,97 @@ class DBHose:
             self.logger.info(wrap_frame(
                 f"Moving data using method: {self.move_method.name}",
             ))
-            # ... логика перемещения ...
+            self._validate_move_requirements()
+
+            if self.move_method.is_custom:
+                self._execute_custom_move()
+            elif self.move_method.have_sql:
+                self._execute_sql_move()
+            else:
+                self._execute_direct_move()
+
+            self.logger.info(wrap_frame(
+                f"Data moved into {self.destination_table}",
+            ))
+
+    def _validate_move_requirements(self) -> None:
+        """Validate that all requirements for the move method are met."""
+
+        if self.move_method.need_filter and not self.source_filter:
+            raise Error.DBHoseValueError(
+                "You must specify columns in source_filter"
+            )
+
+        if self.move_method.is_custom and not self.custom_move_sql:
+            raise Error.DBHoseValueError(
+                "You must specify custom query"
+            )
+
+        if self._is_unsupported_delete():
+            raise Error.DBHoseValueError(
+                "Too many columns in filter_by (> 4) for ClickHouse DELETE"
+            )
+
+    def _is_unsupported_delete(self) -> bool:
+        """Check if DELETE method is used with unsupported configuration."""
+
+        return (
+            self.move_method is MoveMethod.delete
+            and self.dumper_dest.__class__ is NativeDumper
+            and len(self.source_filter) > 4
+        )
+
+    def _execute_custom_move(self) -> None:
+        """Execute custom SQL move."""
+
+        for query in sum(chunk_query(self.custom_move_sql), []):
+            self.dumper_dest.cursor.execute(query)
+
+    def _execute_sql_move(self) -> None:
+        """Execute SQL-based move (DELETE, REPLACE)."""
+
+        move_query = self._get_move_query()
+
+        for query in sum(chunk_query(move_query), []):
+            self.dumper_dest.cursor.execute(query)
+
+
+    def _get_move_query(self) -> str:
+        """Fetch and validate the SQL query for the move method."""
+
+        move_query = define_query(
+            self.dumper_dest.dbname,
+            self.move_method,
+        )
+        reader = self.dumper_dest.to_reader(move_query.format(
+            table_dest=self.destination_table,
+            table_temp=self.target_table,
+            filter_by=self.source_filter,
+        ))
+        is_available, query = tuple(*reader.to_rows())
+
+        if not is_available or not query:
+            raise Error.DBHoseValueError(
+                f"Method {self.move_method.name} is not available for "
+                f"{self.destination_table}. Use another method."
+            )
+
+        return query
+
+
+    def _execute_direct_move(self) -> None:
+        """Execute direct data move (APPEND, REWRITE)."""
+
+        if self.move_method is MoveMethod.rewrite:
+            self.logger.info("Clearing destination table")
+            self.dumper_dest.cursor.execute(
+                f"TRUNCATE TABLE {self.destination_table}"
+            )
+
+        self.dumper_dest.write_between(
+            self.target_table,
+            self.destination_table,
+        )
 
     def run_dq_checks(self) -> None:
         """Run configured Data Quality checks."""
@@ -231,25 +352,55 @@ class DBHose:
         self.logger.info(wrap_frame("Running Data Quality checks"))
         # ... логика DQ проверок ...
 
+    @with_staging_table
     def from_dbms(
         self,
         query: str | None = None,
         table: str | None = None,
     ) -> None:
-        """Upload from DMBS."""
+        """Upload from DBMS."""
 
-        try:
-            self.create_staging()
-            self.logger.info(wrap_frame(
-                f"Loading data to {self.target_table} table"
-            ))
-            self.dumper_dest.write_between(
-                self.target_table,
-                table,
-                query,
-                self.dumper_src,
+        self.logger.info(wrap_frame(
+            f"Loading data to {self.target_table} table"
+        ))
+        self.dumper_dest.write_between(
+            self.target_table,
+            table,
+            query,
+            self.dumper_src,
+        )
+
+    @with_staging_table
+    def from_file(
+        self,
+        fileobj: BufferedReader,
+    ) -> None:
+        """Upload from any dump file object."""
+
+        # TODO. author 0xMihalich Add dr_herriot
+        self.dumper_dest.write_dump(fileobj, self.target_table)
+
+    @with_staging_table
+    def from_iterable(
+        self,
+        dtype_data: Iterable[Any],
+    ) -> None:
+        """Upload from python iterable object."""
+
+        self.dumper_dest.from_rows(dtype_data, self.target_table)
+
+    @with_staging_table
+    def from_frame(
+        self,
+        data_frame: PdFrame | PlFrame | LfFrame,
+    ) -> None:
+        """Upload from DataFrame."""
+
+        if data_frame.__class__ is PdFrame:
+            self.dumper_dest.from_pandas(data_frame, self.target_table)
+        elif data_frame.__class__ in (PlFrame, LfFrame):
+            self.dumper_dest.from_polars(data_frame, self.target_table)
+        else:
+            raise Error.DBHoseTypeError(
+                f"Unknown DataFrame type {data_frame.__class__}.",
             )
-            self.run_dq_checks()
-            self.move_to_destination()
-        finally:
-            self.drop_staging()
