@@ -13,11 +13,14 @@ from base_dumper import (
 )
 
 from .common import (
+    ConnectionConfig,
     ColumnMeta,
     DQCheck,
+    DQConfig,
     Error,
     ETLInfo,
     MoveMethod,
+    StagingConfig,
     TableMetadata,
     logo,
 )
@@ -30,8 +33,10 @@ __all__ = (
     "ColumnMeta",
     "CompressionLevel",
     "CompressionMethod",
+    "ConnectionConfig",
     "DBHose",
     "DQCheck",
+    "DQConfig",
     "DumperMode",
     "DumperType",
     "DumpFormat",
@@ -39,6 +44,7 @@ __all__ = (
     "ETLInfo",
     "IsolationLevel",
     "MoveMethod",
+    "StagingConfig",
     "TableMetadata",
     "Timeout",
 )

@@ -1,9 +1,19 @@
-from dataclasses import dataclass
+from dataclasses import (
+    dataclass,
+    field,
+)
 from enum import Enum
 from typing import (
     Any,
     NamedTuple,
 )
+
+from base_dumper import (
+    CompressionLevel,
+    CompressionMethod,
+    IsolationLevel,
+)
+
 
 
 class DQTest(NamedTuple):
@@ -83,6 +93,38 @@ class ETLInfo:
 
     name: str
     ddl: str
-    transit_table: str
-    transit_ddl: str
+    staging_table: str
+    staging_ddl: str
     table_metadata: TableMetadata
+
+
+@dataclass
+class ConnectionConfig:
+    """Configuration for a single database connection."""
+
+    conn_id: str
+    isolation: IsolationLevel = IsolationLevel.committed
+    compression: CompressionMethod = CompressionMethod.ZSTD
+    compression_level: int = CompressionLevel.ZSTD_DEFAULT
+    timeout: int | None = None
+
+
+@dataclass
+class StagingConfig:
+    """Configuration for staging table."""
+
+    drop_after: bool = True
+    random_suffix: bool = True
+
+
+@dataclass
+class DQConfig:
+    """Configuration for Data Quality checks."""
+
+    disabled_checks: list[str] = field(default_factory=list)
+    custom_queries: list[str] = field(default_factory=list)
+    exclude_columns: list[str] = field(default_factory=list)
+    external_conn_id: str | None = None
+    comparison_table: str | None = None
+    column_mapping: dict[str, str] | None = None
+    use_source_conn: bool = False

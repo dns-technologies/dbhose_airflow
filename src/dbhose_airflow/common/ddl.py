@@ -59,17 +59,17 @@ def _normalize_postgres_meta(
 
     for num, col in enumerate(meta.get("columns", [])):
         columns.append(ColumnMeta(
-                name=col.get("attname"),
-                data_type=col.get("typname"),
-                nullable=not col.get("attnotnull", False),
-                has_default=col.get("atthasdef", False),
-                default_value=col.get("defaultval"),
-                comment=_find_column_comment(comments, col.get("attnum")),
-                position=col.get("attnum", num + 1),
-                type_oid=col.get("atttypid"),
-                type_namespace=col.get("typnamespace"),
-                generated=_pg_generated(col.get("attgenerated")),
-                identity=_pg_identity(col.get("attidentity")),
+            name=col.get("attname"),
+            data_type=col.get("typname"),
+            nullable=not col.get("attnotnull", False),
+            has_default=col.get("atthasdef", False),
+            default_value=col.get("defaultval"),
+            comment=_find_column_comment(comments, col.get("attnum")),
+            position=col.get("attnum", num + 1),
+            type_oid=col.get("atttypid"),
+            type_namespace=col.get("typnamespace"),
+            generated=_pg_generated(col.get("attgenerated")),
+            identity=_pg_identity(col.get("attidentity")),
         ))
 
     return TableMetadata(
@@ -200,11 +200,11 @@ def __validate_ddl(table_meta: dict[str, Any]) -> list[dict[str, Any]]:
     return columns
 
 
-def __build_postgres_transit_ddl(
-    transit_table: str,
+def __build_postgres_staging_ddl(
+    staging_table: str,
     table_meta: dict[str, Any],
 ) -> str:
-    """Build UNLOGGED transit table DDL for PostgreSQL/Greenplum."""
+    """Build UNLOGGED staging table DDL for PostgreSQL/Greenplum."""
 
     columns = __validate_ddl(table_meta)
     col_defs = []
@@ -222,7 +222,7 @@ def __build_postgres_transit_ddl(
 
     columns_str = ",\n".join(col_defs)
     ddl = (
-        f"CREATE UNLOGGED TABLE IF NOT EXISTS {transit_table} (\n"
+        f"CREATE UNLOGGED TABLE IF NOT EXISTS {staging_table} (\n"
         f"{columns_str}\n"
         f") WITH (autovacuum_enabled = false)"
     )
@@ -240,10 +240,10 @@ def __build_postgres_transit_ddl(
     return ddl
 
 
-def __build_clickhouse_transit_ddl(
-    transit_table: str, table_meta: dict[str, Any]
+def __build_clickhouse_staging_ddl(
+    staging_table: str, table_meta: dict[str, Any]
 ) -> str:
-    """Build transit table DDL for ClickHouse with MergeTree engine."""
+    """Build staging table DDL for ClickHouse with MergeTree engine."""
 
     columns = __validate_ddl(table_meta)
     col_defs = []
@@ -275,7 +275,7 @@ def __build_clickhouse_transit_ddl(
     settings_str = ", ".join(f"{k} = {v}" for k, v in settings.items())
 
     return (
-        f"CREATE TABLE IF NOT EXISTS {transit_table} (\n"
+        f"CREATE TABLE IF NOT EXISTS {staging_table} (\n"
         f"{columns_str}\n"
         f")\n"
         f"ENGINE = MergeTree{partition_clause}\n"
@@ -284,26 +284,26 @@ def __build_clickhouse_transit_ddl(
     )
 
 
-def build_transit_ddl(
-    transit_table: str,
+def build_staging_ddl(
+    staging_table: str,
     table_meta: dict[str, Any],
     is_postgres: bool,
 ) -> str:
-    """Generate DDL for transit table."""
+    """Generate DDL for staging table."""
 
     if is_postgres:
-        return __build_postgres_transit_ddl(transit_table, table_meta)
+        return __build_postgres_staging_ddl(staging_table, table_meta)
 
-    return __build_clickhouse_transit_ddl(transit_table, table_meta)
+    return __build_clickhouse_staging_ddl(staging_table, table_meta)
 
 
 def generate_ddl(
     table_name: str,
     cursor: Cursor | HTTPCursor,
-    random_postfix: bool = True,
-    without_transit: bool = False,
+    staging_random_suffix: bool = True,
+    skip_staging: bool = False,
 ) -> ETLInfo | TableMetadata:
-    """Generate DDLs and transit table."""
+    """Generate DDL and staging table."""
 
     ddl_core = SERVER_NAME.get(cursor.__class__)
 
@@ -315,7 +315,7 @@ def generate_ddl(
         is_postgres = type(cursor) is Cursor
         table_metadata = normalize_metadata(table_meta, is_postgres)
 
-        if without_transit:
+        if skip_staging:
             return table_metadata
 
         if table_name[-1] in ["`", '"']:
@@ -325,23 +325,23 @@ def generate_ddl(
             _table_name = table_name
             _closing = ""
 
-        transit_table = f"{_table_name}_temp"
+        staging_table = f"{_table_name}_staging"
 
-        if random_postfix:
-            transit_table += token_bytes(4).hex()
+        if staging_random_suffix:
+            staging_table += token_bytes(4).hex()
 
-        transit_table += _closing
-        transit_ddl = build_transit_ddl(
-            transit_table,
+        staging_table += _closing
+        staging_ddl = build_staging_ddl(
+            staging_table,
             table_meta,
             is_postgres,
         )
         return ETLInfo(
-            table_name,
-            table_ddl,
-            transit_table,
-            transit_ddl,
-            table_metadata,
+            name=table_name,
+            ddl=table_ddl,
+            staging_table=staging_table,
+            staging_ddl=staging_ddl,
+            table_metadata=table_metadata,
         )
     except Exception as error:
         raise errors.DBHoseError(error)
