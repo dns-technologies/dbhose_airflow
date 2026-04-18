@@ -100,8 +100,15 @@ class DBHose:
         self._initialize()
 
     @staticmethod
-    def with_staging_table(dbhose_method: Callable) -> Callable:
-        """Decorator to manage staging table lifecycle."""
+    def etl_pipeline(dbhose_method: Callable) -> Callable:
+        """Decorator that manages the full ETL pipeline.
+
+        Handles:
+        - Staging table creation (unless use_origin=True)
+        - Data Quality checks (if configured)
+        - Moving data to destination
+        - Staging table cleanup (unless drop_after=False)
+        """
 
         def wrapper(self: DBHose, *args, **kwargs) -> None:
 
@@ -167,6 +174,18 @@ class DBHose:
                 self.mode,
                 self.dump_format,
             )
+
+        if not self.dump_format and self.dumper_src:
+            if self.dumper_dest.__class__ is not self.dumper_src.__class__:
+                self.dump_format = DumpFormat.CSV
+            else:
+                self.dump_format = DumpFormat.BINARY
+
+            self.dumper_src.dump_format = self.dump_format
+            self.dumper_dest.dump_format = self.dump_format
+            self.logger.info(wrap_frame(
+                f"Dump format mode switch to {self.dump_format.name}",
+            ))
 
         if self.dq_extra_conn:
             self.dumper_dq = define_dumper(
@@ -352,7 +371,7 @@ class DBHose:
         self.logger.info(wrap_frame("Running Data Quality checks"))
         # ... логика DQ проверок ...
 
-    @with_staging_table
+    @etl_pipeline
     def from_dbms(
         self,
         query: str | None = None,
@@ -370,7 +389,7 @@ class DBHose:
             self.dumper_src,
         )
 
-    @with_staging_table
+    @etl_pipeline
     def from_file(
         self,
         fileobj: BufferedReader,
@@ -380,7 +399,7 @@ class DBHose:
         # TODO. author 0xMihalich Add dr_herriot
         self.dumper_dest.write_dump(fileobj, self.target_table)
 
-    @with_staging_table
+    @etl_pipeline
     def from_iterable(
         self,
         dtype_data: Iterable[Any],
@@ -389,7 +408,7 @@ class DBHose:
 
         self.dumper_dest.from_rows(dtype_data, self.target_table)
 
-    @with_staging_table
+    @etl_pipeline
     def from_frame(
         self,
         data_frame: PdFrame | PlFrame | LfFrame,
@@ -397,10 +416,11 @@ class DBHose:
         """Upload from DataFrame."""
 
         if data_frame.__class__ is PdFrame:
-            self.dumper_dest.from_pandas(data_frame, self.target_table)
-        elif data_frame.__class__ in (PlFrame, LfFrame):
-            self.dumper_dest.from_polars(data_frame, self.target_table)
-        else:
-            raise Error.DBHoseTypeError(
-                f"Unknown DataFrame type {data_frame.__class__}.",
-            )
+            return self.dumper_dest.from_pandas(data_frame, self.target_table)
+
+        if data_frame.__class__ in (PlFrame, LfFrame):
+            return self.dumper_dest.from_polars(data_frame, self.target_table)
+
+        raise Error.DBHoseTypeError(
+            f"Unknown DataFrame type {data_frame.__class__}.",
+        )
