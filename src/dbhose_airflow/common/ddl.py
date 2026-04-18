@@ -300,8 +300,9 @@ def build_transit_ddl(
 def generate_ddl(
     table_name: str,
     cursor: Cursor | HTTPCursor,
-    random_prefix: bool = True,
-) -> tuple[str, ...]:
+    random_postfix: bool = True,
+    without_transit: bool = False,
+) -> ETLInfo | TableMetadata:
     """Generate DDLs and transit table."""
 
     ddl_core = SERVER_NAME.get(cursor.__class__)
@@ -309,23 +310,27 @@ def generate_ddl(
     if not ddl_core:
         raise errors.DBHoseTypeError("No DDL method found.")
 
-    if table_name[-1] in ["`", '"']:
-        _table_name = table_name[:-1]
-        _closing = table_name[-1]
-    else:
-        _table_name = table_name
-        _closing = ""
-
-    transit_table = f"{_table_name}_temp"
-
-    if random_prefix:
-        transit_table += token_bytes(4).hex()
-
-    transit_table += _closing
-
     try:
         table_ddl, table_meta = ddl_core(cursor, table_name)
         is_postgres = type(cursor) is Cursor
+        table_metadata = normalize_metadata(table_meta, is_postgres)
+
+        if without_transit:
+            return table_metadata
+
+        if table_name[-1] in ["`", '"']:
+            _table_name = table_name[:-1]
+            _closing = table_name[-1]
+        else:
+            _table_name = table_name
+            _closing = ""
+
+        transit_table = f"{_table_name}_temp"
+
+        if random_postfix:
+            transit_table += token_bytes(4).hex()
+
+        transit_table += _closing
         transit_ddl = build_transit_ddl(
             transit_table,
             table_meta,
@@ -336,7 +341,7 @@ def generate_ddl(
             table_ddl,
             transit_table,
             transit_ddl,
-            normalize_metadata(table_meta, is_postgres),
+            table_metadata,
         )
     except Exception as error:
         raise errors.DBHoseError(error)
