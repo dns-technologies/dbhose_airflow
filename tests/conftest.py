@@ -29,6 +29,19 @@ CLICKHOUSE_IMAGE = "clickhouse/clickhouse-server:latest"
 POSTGRES_IMAGE = "postgres:15"
 
 
+def get_basehook_path() -> str:
+    """Определить правильный путь к BaseHook для мока."""
+    try:
+        from airflow.sdk.bases.hook import BaseHook  # type: ignore  # noqa: F401
+        return "airflow.sdk.bases.hook.BaseHook"
+    except (ImportError, AttributeError):
+        try:
+            from airflow.hooks.base import BaseHook  # type: ignore  # noqa: F401
+            return "airflow.hooks.base.BaseHook"
+        except (ImportError, AttributeError):
+            return "airflow.hooks.base_hook.BaseHook"
+
+
 def random_string(length: int = 8) -> str:
     return "".join(random.choices(string.ascii_lowercase, k=length))  # noqa: S311
 
@@ -248,6 +261,41 @@ def test_dataframe(test_rows):
 
 
 @pytest.fixture
+def mock_airflow_connections(pg_connector, ch_connector):
+    """Мокает BaseHook.get_connection для обеих БД."""
+
+    def mock_get_connection(conn_id):
+        if conn_id == "postgres_conn":
+            mock_conn = MagicMock()
+            mock_conn.conn_type = "postgres"
+            mock_conn.conn_id = "postgres_conn"
+            mock_conn.host = pg_connector.host
+            mock_conn.port = pg_connector.port
+            mock_conn.login = pg_connector.user
+            mock_conn.password = pg_connector.password
+            mock_conn.schema = pg_connector.dbname
+            return mock_conn
+        elif conn_id == "clickhouse_conn":
+            mock_conn = MagicMock()
+            mock_conn.conn_type = "clickhouse"
+            mock_conn.conn_id = "clickhouse_conn"
+            mock_conn.host = ch_connector.host
+            mock_conn.port = ch_connector.port
+            mock_conn.login = ch_connector.user
+            mock_conn.password = ch_connector.password
+            mock_conn.schema = ch_connector.dbname
+            return mock_conn
+        raise ValueError(f"Unknown conn_id: {conn_id}")
+
+    basehook_path = get_basehook_path()
+    with patch(
+        f"{basehook_path}.get_connection",
+        side_effect=mock_get_connection,
+    ):
+        yield
+
+
+@pytest.fixture
 def dbhose_pg_to_ch(
     pg_connector,
     ch_connector,
@@ -278,7 +326,8 @@ def dbhose_pg_to_ch(
     pg_dumper.from_rows(test_rows, pg_table)
     pg_dumper.close()
 
-    with patch("airflow.hooks.base.BaseHook.get_connection") as mock_get:
+    basehook_path = get_basehook_path()  # <-- ИСПОЛЬЗУЕМ АДАПТИВНЫЙ ПУТЬ
+    with patch(f"{basehook_path}.get_connection") as mock_get:
         mock_pg = MagicMock()
         mock_pg.conn_type = "postgres"
         mock_pg.conn_id = "postgres_conn"
@@ -287,7 +336,6 @@ def dbhose_pg_to_ch(
         mock_pg.login = pg_connector.user
         mock_pg.password = pg_connector.password
         mock_pg.schema = pg_connector.dbname
-
         mock_ch = MagicMock()
         mock_ch.conn_type = "clickhouse"
         mock_ch.conn_id = "clickhouse_conn"
@@ -296,12 +344,10 @@ def dbhose_pg_to_ch(
         mock_ch.login = ch_connector.user
         mock_ch.password = ch_connector.password
         mock_ch.schema = ch_connector.dbname
-
         mock_get.side_effect = lambda conn_id: {
             "postgres_conn": mock_pg,
             "clickhouse_conn": mock_ch,
         }[conn_id]
-
         ch_table = f"ch_dest_{random_string()}"
         full_ch_table = f"{ch_connector.dbname}.{ch_table}"
         ch_dumper = NativeDumper(
@@ -316,7 +362,6 @@ def dbhose_pg_to_ch(
             ) ENGINE = Memory
         """)
         ch_dumper.close()
-
         dbhose = DBHose(
             destination_table=full_ch_table,
             destination_conn="clickhouse_conn",
@@ -348,37 +393,3 @@ def dbhose_pg_to_ch(
             ch_dumper.close()
         except Exception:
             ...
-
-
-@pytest.fixture
-def mock_airflow_connections(pg_connector, ch_connector):
-    """Мокает BaseHook.get_connection для обеих БД."""
-
-    def mock_get_connection(conn_id):
-        if conn_id == "postgres_conn":
-            mock_conn = MagicMock()
-            mock_conn.conn_type = "postgres"
-            mock_conn.conn_id = "postgres_conn"
-            mock_conn.host = pg_connector.host
-            mock_conn.port = pg_connector.port
-            mock_conn.login = pg_connector.user
-            mock_conn.password = pg_connector.password
-            mock_conn.schema = pg_connector.dbname
-            return mock_conn
-        elif conn_id == "clickhouse_conn":
-            mock_conn = MagicMock()
-            mock_conn.conn_type = "clickhouse"
-            mock_conn.conn_id = "clickhouse_conn"
-            mock_conn.host = ch_connector.host
-            mock_conn.port = ch_connector.port
-            mock_conn.login = ch_connector.user
-            mock_conn.password = ch_connector.password
-            mock_conn.schema = ch_connector.dbname
-            return mock_conn
-        raise ValueError(f"Unknown conn_id: {conn_id}")
-
-    with patch(
-        "airflow.hooks.base.BaseHook.get_connection",
-        side_effect=mock_get_connection,
-    ):
-        yield

@@ -15,7 +15,6 @@ from base_dumper import (
 )
 
 
-
 class DQTest(NamedTuple):
     """Data quality test."""
 
