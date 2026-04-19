@@ -103,10 +103,10 @@ class ConnectionConfig:
     """Configuration for a single database connection."""
 
     conn_id: str
-    isolation: IsolationLevel = IsolationLevel.committed
     compression: CompressionMethod = CompressionMethod.ZSTD
     compression_level: int = CompressionLevel.ZSTD_DEFAULT
     timeout: int | None = None
+    isolation: IsolationLevel = IsolationLevel.committed
 
 
 @dataclass

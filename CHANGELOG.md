@@ -1,5 +1,25 @@
 # Version History
 
+## 0.2.0.dev1
+
+* Developer release (not public to pip)
+* Update `README.md`
+* Add `DBHose.error_message()` NoReturn method
+* Code refactor
+* Change `DBHose.dump_format` to property method
+* Change `DBHose.mode` to property method
+* Change `DBHose._init_conn()` method from staticmethod into classmethod
+* Refactor `DBHose._initialize()` method
+* Add auto change `DBHose.dump_format` after uploading stage to `DumpFormat.BINARY`
+* Change `DBHose.from_file()` method parameter from fileobj: `io.BufferedReader` to file_path: `str` | `pathlib.Path`
+* Improve `ConnectionConfig` dataclass
+* Fix dumpers initialization
+* Fix DQ tests
+* Rename `DBHose._fetch_single_value()` to `DBHose._fetch_dq_values()`
+* Fix move queries
+* Fix some bugs
+* Add basic pytests
+
 ## 0.2.0.dev0
 
 * Developer release (not public to pip)

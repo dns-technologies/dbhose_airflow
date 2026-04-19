@@ -54,7 +54,7 @@ with
     )
 select
     (select case when count(*) > 0 then true else false end
-     from matching_partitions) as is_avaliable
+     from matching_partitions) as is_available
   , (select commands from detach_commands) || E'\n' ||
     (select commands from attach_commands) || E'\n' ||
     (select commands from drop_commands) as move_query

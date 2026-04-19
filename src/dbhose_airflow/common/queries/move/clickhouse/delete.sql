@@ -9,7 +9,7 @@ with
         )
     ) as values_tuples
 select
-    true as is_avaliable,
+    true as is_available,
     'ALTER TABLE {table_dest} DELETE WHERE ' ||
     if(columns_count > 1, '(' || arrayStringConcat(columns, ', ') || ')', arrayStringConcat(columns, ', ')) ||
     ' IN (' ||

@@ -1,1 +1,1 @@
-select count(*) as value from {table}
+select count(*) as value, '' as result  from {table}

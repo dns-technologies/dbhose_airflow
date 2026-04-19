@@ -1,8 +1,9 @@
 from collections.abc import Iterable
-from io import BufferedReader
+from pathlib import Path
 from typing import (
     Any,
     Callable,
+    NoReturn,
 )
 
 from airflow.hooks.base import log
@@ -75,10 +76,16 @@ class DBHose:
         """
 
         if not destination_table:
-            raise Error.DBHoseNotFoundError("destination_table is requiered.")
+            self.error_message(
+                "destination_table is requiered.",
+                Error.DBHoseNotFoundError,
+            )
 
         if not destination_conn:
-            raise Error.DBHoseNotFoundError("destination_conn is requiered.")
+            self.error_message(
+                "destination_conn is requiered.",
+                Error.DBHoseNotFoundError,
+            )
 
         self.logger = log
         self.destination_table = destination_table
@@ -89,8 +96,8 @@ class DBHose:
         self.staging = staging or StagingConfig()
         self.move_method = move_method
         self.custom_move_sql = custom_move_sql
-        self.mode = mode
-        self.dump_format = dump_format
+        self._mode = mode
+        self._dump_format = dump_format
         self.dq = dq or DQConfig()
         self.dumper_dest: DumperType | None = None
         self.dumper_src: DumperType | None = None
@@ -99,6 +106,52 @@ class DBHose:
         self.target_table: str | None = None
         self.comparison_metadata: TableMetadata | None = None
         self._initialize()
+
+    @property
+    def mode(self) -> DumperMode:
+        """Property method for get dumper mode."""
+
+        return self._mode
+
+    @mode.setter
+    def mode(self, mode_value: DumperMode) -> DumperMode:
+        """Property method for set dumper mode value."""
+
+        if self._mode is not mode_value:
+            self._mode = mode_value
+
+            for dumper in (self.dumper_src, self.dumper_dest, self.dumper_dq):
+                if dumper:
+                    dumper.mode = self._mode
+
+            self.logger.info(wrap_frame(
+                f"DBHose mode switch to {self._mode.name}",
+            ))
+
+        return self._mode
+
+    @property
+    def dump_format(self) -> DumpFormat:
+        """Property method for get dump format."""
+
+        return self._dump_format
+
+    @dump_format.setter
+    def dump_format(self, dump_format_value: DumpFormat) -> DumpFormat:
+        """Property method for set dump format value."""
+
+        if self._dump_format is not dump_format_value:
+            self._dump_format = dump_format_value
+
+            for dumper in (self.dumper_src, self.dumper_dest, self.dumper_dq):
+                if dumper:
+                    dumper.dump_format = self._dump_format
+
+            self.logger.info(wrap_frame(
+                f"DBHose dump format switch to {self._dump_format.name}",
+            ))
+
+        return self._dump_format
 
     @staticmethod
     def etl_pipeline(dbhose_method: Callable) -> Callable:
@@ -126,8 +179,18 @@ class DBHose:
 
         return wrapper
 
-    @staticmethod
+    def error_message(
+        self,
+        error: str | BaseException,
+        exception: Exception = Error.DBHoseError,
+    ) -> NoReturn:
+        """Raise DBHose errors."""
+
+        self.logger.error(f"{exception.__class__.__name__}: {error}")
+        raise exception(error)
+
     def _init_conn(
+        self,
         connection: str | ConnectionConfig | None,
         parent_config: ConnectionConfig | None = None,
     ) -> ConnectionConfig | None:
@@ -140,10 +203,10 @@ class DBHose:
             if parent_config:
                 return ConnectionConfig(
                     connection,
-                    parent_config.isolation,
                     parent_config.compression,
                     parent_config.compression_level,
                     parent_config.timeout,
+                    parent_config.isolation,
                 )
 
             return ConnectionConfig(connection)
@@ -151,8 +214,9 @@ class DBHose:
         if isinstance(connection, ConnectionConfig):
             return connection
 
-        raise Error.DBHoseValueError(
-            "connector must be airflow_conn_id or ConnectionConfig struct"
+        self.error_message(
+            "connector must be airflow_conn_id or ConnectionConfig struct",
+            Error.DBHoseValueError,
         )
 
     def _initialize(self) -> None:
@@ -161,6 +225,7 @@ class DBHose:
         self.logger.info(logo())
         self.dumper_dest = define_dumper(
             self.destination_conn.conn_id,
+            self.destination_conn.compression,
             self.destination_conn.compression_level,
             self.destination_conn.timeout,
             self.destination_conn.isolation,
@@ -172,6 +237,7 @@ class DBHose:
         if self.source_conn:
             self.dumper_src = define_dumper(
                 self.source_conn.conn_id,
+                self.source_conn.compression,
                 self.source_conn.compression_level,
                 self.source_conn.timeout,
                 self.source_conn.isolation,
@@ -185,15 +251,10 @@ class DBHose:
             else:
                 self.dump_format = DumpFormat.BINARY
 
-            self.dumper_src.dump_format = self.dump_format
-            self.dumper_dest.dump_format = self.dump_format
-            self.logger.info(wrap_frame(
-                f"Dump format mode switch to {self.dump_format.name}",
-            ))
-
         if self.dq_extra_conn:
             self.dumper_dq = define_dumper(
                 self.dq_extra_conn.conn_id,
+                self.dq_extra_conn.compression,
                 self.dq_extra_conn.compression_level,
                 self.dq_extra_conn.timeout,
                 self.dq_extra_conn.isolation,
@@ -231,27 +292,31 @@ class DBHose:
         """Check if dumper_dest is in read-only mode."""
 
         if self.dumper_dest.is_readonly and self.mode is not DumperMode.TEST:
-            raise Error.DBHosePermissionError(
+            self.error_message(
                 "Read-only mode detected for destination connection. "
                 "Check permissions.",
+                Error.DBHosePermissionError,
             )
 
     def _validate_move_requirements(self) -> None:
         """Validate that all requirements for the move method are met."""
 
         if self.move_method.need_filter and not self.source_filter:
-            raise Error.DBHoseValueError(
-                "You must specify columns in source_filter"
+            self.error_message(
+                "You must specify columns in source_filter",
+                Error.DBHoseValueError,
             )
 
         if self.move_method.is_custom and not self.custom_move_sql:
-            raise Error.DBHoseValueError(
-                "You must specify custom query in custom_move_sql"
+            self.error_message(
+                "You must specify custom query in custom_move_sql",
+                Error.DBHoseValueError,
             )
 
         if self._is_unsupported_delete():
-            raise Error.DBHoseValueError(
-                "Too many columns in filter_by (> 4) for ClickHouse DELETE"
+            self.error_message(
+                "Too many columns in filter_by (> 4) for ClickHouse DELETE",
+                Error.DBHoseValueError,
             )
 
     def _is_unsupported_delete(self) -> bool:
@@ -292,9 +357,10 @@ class DBHose:
         is_available, query = tuple(*reader.to_rows())
 
         if not is_available or not query:
-            raise Error.DBHoseValueError(
+            self.error_message(
                 f"Method {self.move_method.name} is not available for "
-                f"{self.destination_table}. Use another method."
+                f"{self.destination_table}. Use another method.",
+                Error.DBHoseValueError,
             )
 
         return query
@@ -309,8 +375,8 @@ class DBHose:
             )
 
         self.dumper_dest.write_between(
-            self.target_table,
             self.destination_table,
+            self.target_table,
         )
 
     def _run_single_check(self, dq_check: DQCheck) -> None:
@@ -327,17 +393,17 @@ class DBHose:
 
             self.logger.info(wrap_frame(f"{dq_check.description} test Pass"))
         except Error.DBHoseValueError as error:
-            raise error
+            self.error_message(error, Error.DBHoseValueError)
         except Exception as error:
             self.logger.error(wrap_frame(
                 f"{dq_check.description} test Fail: {error}",
             ))
-            raise Error.DBHoseError(str(error))
+            self.error_message(error)
 
     def _should_skip_check(self, dq_check: DQCheck) -> bool:
         """Check if DQ test should be skipped."""
 
-        if dq_check.name in self.dq.disabled_checks:
+        if dq_check in self.dq.disabled_checks:
             self.logger.warning(wrap_frame(
                 f"{dq_check.description} test skipped by user",
             ))
@@ -426,13 +492,14 @@ class DBHose:
         query_dest = define_query(self.dumper_dest.dbname, dq_check).format(
             table=self.target_table,
         )
-        value_src = self._fetch_single_value(self.dumper_dq, query_src)
-        value_dest = self._fetch_single_value(self.dumper_dest, query_dest)
+        value_src = self._fetch_dq_values(self.dumper_dq, query_src)[0]
+        value_dest = self._fetch_dq_values(self.dumper_dest, query_dest)[0]
 
         if value_src != value_dest:
-            raise Error.DBHoseValueError(
+            self.error_message(
                 f"{dq_check.description} test Fail: "
-                "value {value_src} <> {value_dest}"
+                f"value {value_src} <> {value_dest}",
+                Error.DBHoseValueError,
             )
 
     def _run_standalone_with_generated_queries(
@@ -463,11 +530,12 @@ class DBHose:
         query_dest = define_query(self.dumper_dest.dbname, dq_check).format(
             table=self.target_table,
         )
-        value, result = self._fetch_single_value(self.dumper_dest, query_dest)
+        value, result = self._fetch_dq_values(self.dumper_dest, query_dest)
 
         if result == "Fail":
-            raise Error.DBHoseValueError(
-                f"{dq_check.description} test Fail with {value} error rows"
+            self.error_message(
+                f"{dq_check.description} test Fail with {value} error rows",
+                Error.DBHoseValueError,
             )
 
     def _fetch_tests(self, dumper: DumperType, query: str, table: str) -> list:
@@ -498,13 +566,14 @@ class DBHose:
     ) -> None:
         """Compare values from source and destination."""
 
-        value_src = self._fetch_single_value(dumper_src, query_src)
-        value_dest = self._fetch_single_value(dumper_dest, query_dest)
+        value_src = self._fetch_dq_values(dumper_src, query_src)[0]
+        value_dest = self._fetch_dq_values(dumper_dest, query_dest)[0]
 
         if value_src != value_dest:
-            raise Error.DBHoseValueError(
+            self.error_message(
                 f"Check column \"{column_name}\" test Fail: "
                 f"value {value_src} <> {value_dest}",
+                Error.DBHoseValueError,
             )
 
         self.logger.info(wrap_frame(f'Check column "{column_name}" test Pass'))
@@ -516,18 +585,19 @@ class DBHose:
         value, result = next(iter(reader.to_rows()))
 
         if result == "Fail":
-            raise Error.DBHoseValueError(
+            self.error_message(
                 f"Check column \"{column_name}\" test "
                 f"Fail with {value} error rows",
+                Error.DBHoseValueError,
             )
 
         self.logger.info(wrap_frame(f'Check column "{column_name}" test Pass'))
 
-    def _fetch_single_value(self, dumper: DumperType, query: str) -> tuple:
+    def _fetch_dq_values(self, dumper: DumperType, query: str) -> tuple:
         """Fetch a single value from query result."""
 
         reader = dumper.to_reader(query)
-        return next(iter(reader.to_rows()))[0]
+        return next(iter(reader.to_rows()))
 
     def create_staging(self) -> None:
         """Create staging table."""
@@ -565,6 +635,7 @@ class DBHose:
             self.logger.info(wrap_frame(
                 f"Moving data using method: {self.move_method.name}",
             ))
+            self.dump_format = DumpFormat.BINARY
             self._validate_move_requirements()
 
             if self.move_method.is_custom:
@@ -582,6 +653,7 @@ class DBHose:
         """Run configured Data Quality checks."""
 
         self.logger.info(wrap_frame("Running Data Quality checks"))
+        self.dump_format = DumpFormat.BINARY
 
         for check_name in DQCheck._member_names_:
             dq_check = DQCheck[check_name]
@@ -600,10 +672,10 @@ class DBHose:
         """Upload from DBMS."""
 
         self.dumper_dest.write_between(
-            self.target_table,
-            table,
-            query,
-            self.dumper_src,
+            table_dest=self.target_table,
+            table_src=table,
+            query_src=query,
+            dumper_src=self.dumper_src,
         )
 
     @etl_pipeline
@@ -613,17 +685,27 @@ class DBHose:
     ) -> None:
         """Upload from python iterable object."""
 
-        self.dumper_dest.from_rows(dtype_data, self.target_table)
+        self.dump_format = DumpFormat.BINARY
+        dtype_data, source = self.dumper_dest._db_meta_from_iter(dtype_data)
+        self.dumper_dest.from_rows(dtype_data, self.target_table, source)
 
     @etl_pipeline
     def from_file(
         self,
-        fileobj: BufferedReader,
+        file_path: str | Path,
     ) -> None:
-        """Upload from any dump file object."""
+        """Upload from any dump file."""
 
         # TODO. Add dr_herriot author 0xMihalich
-        self.dumper_dest.write_dump(fileobj, self.target_table)
+        try:
+            with open(file_path, "rb") as fileobj:
+                self.dumper_dest.write_dump(fileobj, self.target_table)
+        except PermissionError as error:
+            self.error_message(error, Error.DBHosePermissionError)
+        except FileNotFoundError as error:
+            self.error_message(error, Error.DBHoseNotFoundError)
+        except Exception as error:
+            self.error_message(error)
 
     @etl_pipeline
     def from_frame(
@@ -632,13 +714,15 @@ class DBHose:
     ) -> None:
         """Upload from DataFrame."""
 
-        # TODO. Add dr_herriot author 0xMihalich
+        self.dump_format = DumpFormat.BINARY
+
         if data_frame.__class__ is PdFrame:
             return self.dumper_dest.from_pandas(data_frame, self.target_table)
 
         if data_frame.__class__ in (PlFrame, LfFrame):
             return self.dumper_dest.from_polars(data_frame, self.target_table)
 
-        raise Error.DBHoseTypeError(
+        self.error_message(
             f"Unknown DataFrame type {data_frame.__class__}.",
+            Error.DBHoseTypeError,
         )

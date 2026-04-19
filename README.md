@@ -77,7 +77,7 @@ DBHose(
 |-----------|------|---------|-------------|
 | `source_conn` | `str \| ConnectionConfig \| None` | `None` | Source connection (if `None`, destination is used) |
 | `dq_extra_conn` | `str \| ConnectionConfig \| None` | `None` | External connection for DQ comparison table |
-| `source_filter` | `list[str] \| None` | `None` | List of WHERE conditions for source query |
+| `source_filter` | `list[str] \| None` | `None` | List of columns for auto generate filter expressions to insert into source table |
 | `staging` | `StagingConfig \| None` | `None` | Staging table configuration |
 | `move_method` | `MoveMethod` | `MoveMethod.replace` | Method for moving data from staging to destination |
 | `custom_move_sql` | `str \| None` | `None` | Custom SQL for `move_method.CUSTOM` |
@@ -147,7 +147,7 @@ class DQConfig:
 | `disabled_checks` | `list[DQCheck]` | `[]` | List of DQ checks to skip |
 | `custom_queries` | `list[str]` | `[]` | Custom DQ query paths |
 | `exclude_columns` | `list[str]` | `[]` | Columns to exclude from DQ checks |
-| `column_mapping` | `dict[str, str]` | `{}` | Map source column names to destination |
+| `column_mapping` | `dict[str, str]` | `{}` | Map comparison table column names for compare with destination table column names |
 | `comparison_table` | `str \| None` | `None` | Table to compare against for DQ checks |
 | `use_source_conn` | `bool` | `False` | Use source connection for comparison table |
 

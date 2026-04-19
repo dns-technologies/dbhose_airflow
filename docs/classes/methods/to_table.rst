@@ -228,7 +228,7 @@ to_table
       * - :class:`ValueError`
         - ClickHouse + ``delete`` + >4 колонок в ``filter_by``
       * - :class:`ValueError`
-        - Метод недоступен для таблицы (проверка ``is_avaliable``)
+        - Метод недоступен для таблицы (проверка ``is_available``)
       * - Исключения СУБД
         - Ошибки выполнения SQL запросов
 

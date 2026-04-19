@@ -16,9 +16,9 @@ with
     order by partition
 )
 select
-    toBool(count() > 0) as is_avaliable
+    toBool(count() > 0) as is_available
   , if(
-        is_avaliable
+        is_available
       , 'alter table ' || table_dest || ' ' ||
         arrayStringConcat(
             arrayMap(
