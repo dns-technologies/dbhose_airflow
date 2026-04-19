@@ -18,12 +18,12 @@ def get_basehook() -> object:
     """Get Apache Airflow BaseHook."""
 
     try:
-        from airflow.sdk.bases.hook import BaseHook # type: ignore
-    except ImportError:
+        from airflow.sdk.bases.hook import BaseHook  # type: ignore
+    except (ImportError, AttributeError):
         try:
-            from airflow.hooks.base import BaseHook # type: ignore
-        except ImportError:
-            from airflow.hooks.base_hook import BaseHook # type: ignore
+            from airflow.hooks.base import BaseHook  # type: ignore
+        except (ImportError, AttributeError):
+            from airflow.hooks.base_hook import BaseHook  # type: ignore
 
     return BaseHook
 
@@ -32,8 +32,8 @@ def get_logger() -> Logger:
     """Get Apache Airflow Logger."""
 
     try:
-        from airflow.hooks.base import log as logger # type: ignore
-    except ImportError:
+        from airflow.hooks.base import log as logger  # type: ignore
+    except (ImportError, AttributeError):
         from logging import getLogger
         logger = getLogger(__name__)
 
