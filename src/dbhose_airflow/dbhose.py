@@ -6,7 +6,6 @@ from typing import (
     NoReturn,
 )
 
-from airflow.hooks.base import log
 from base_dumper import (
     DumperMode,
     DumperType,
@@ -32,6 +31,7 @@ from .common import (
     define_dumper,
     define_query,
     generate_ddl,
+    get_logger,
     logo,
     wrap_frame,
 )
@@ -87,7 +87,7 @@ class DBHose:
                 Error.DBHoseNotFoundError,
             )
 
-        self.logger = log
+        self.logger = get_logger()
         self.destination_table = destination_table
         self.destination_conn = self._init_conn(destination_conn)
         self.source_conn = self._init_conn(source_conn)

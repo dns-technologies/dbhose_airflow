@@ -4,6 +4,7 @@ from . import errors as Error
 from .airflow_connect import (
     define_connector,
     define_dumper,
+    get_logger,
 )
 from .ddl import generate_ddl
 from .defines import FROM_CONNTYPE
@@ -42,6 +43,7 @@ __all__ = (
     "define_dumper",
     "define_query",
     "generate_ddl",
+    "get_logger",
     "logo",
     "wrap_frame",
     "FROM_CONNTYPE",

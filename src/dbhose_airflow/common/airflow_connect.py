@@ -1,7 +1,5 @@
-from airflow.hooks.base import (
-    BaseHook,
-    log as logger,
-)
+from logging import Logger
+
 from base_dumper import (
     CompressionLevel,
     CompressionMethod,
@@ -16,10 +14,37 @@ from . import errors
 from .defines import FROM_CONNTYPE
 
 
+def get_basehook() -> object:
+    """Get Apache Airflow BaseHook."""
+
+    try:
+        from airflow.sdk.bases.hook import BaseHook # type: ignore
+    except ImportError:
+        try:
+            from airflow.hooks.base import BaseHook # type: ignore
+        except ImportError:
+            from airflow.hooks.base_hook import BaseHook # type: ignore
+
+    return BaseHook
+
+
+def get_logger() -> Logger:
+    """Get Apache Airflow Logger."""
+
+    try:
+        from airflow.hooks.base import log as logger # type: ignore
+    except ImportError:
+        from logging import getLogger
+        logger = getLogger(__name__)
+
+    return logger
+
+
 def define_connector(airflow_connection: str) -> tuple[str, DBConnector]:
     """Define DBConnector from airflow_connection string."""
 
-    connection = BaseHook.get_connection(airflow_connection)
+    basehook = get_basehook()
+    connection = basehook.get_connection(airflow_connection)
     return connection.conn_type, DBConnector(
         connection.host,
         connection.schema,
@@ -54,7 +79,7 @@ def define_dumper(
         connector=connector,
         compression_method=compression_method,
         compression_level=compression_level,
-        logger=logger,
+        logger=get_logger(),
         timeout=timeout,
         isolation=isolation,
         mode=mode,

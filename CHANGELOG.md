@@ -18,6 +18,7 @@
 * Rename `DBHose._fetch_single_value()` to `DBHose._fetch_dq_values()`
 * Fix move queries
 * Fix some bugs
+* Fix work with all Apache Airflow versions
 * Add basic pytests
 
 ## 0.2.0.dev0
