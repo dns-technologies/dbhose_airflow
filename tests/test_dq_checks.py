@@ -55,10 +55,10 @@ class TestDQChecks:
         except Exception:
             ...
 
-    def test_empty_check_pass(self, mock_airflow_pg_connection):
+    def test_empty_check_pass(self, mock_airflow_connections):
         """Проверка empty должна пройти для непустой таблицы."""
 
-        mock_airflow_pg_connection
+        mock_airflow_connections
         dbhose = DBHose(
             destination_table=self.pg_table,
             destination_conn="postgres_conn",
@@ -69,11 +69,11 @@ class TestDQChecks:
         )
         dbhose.run_dq_checks()
 
-    def test_disabled_check_skipped(self, mock_airflow_pg_connection, caplog):
+    def test_disabled_check_skipped(self, mock_airflow_connections, caplog):
         """Отключенная проверка должна пропускаться с предупреждением."""
 
         caplog.set_level(logging.WARNING)
-        mock_airflow_pg_connection
+        mock_airflow_connections
         dbhose = DBHose(
             destination_table=self.pg_table,
             destination_conn="postgres_conn",
