@@ -6,11 +6,11 @@ from native_dumper import HTTPCursor
 from nativelib import Column
 from psycopg import Cursor
 
-from ..core import (
+from . import errors
+from .ddl_core import (
     clickhouse_ddl,
     postgres_ddl,
 )
-from . import errors
 from .structs import (
     ColumnMeta,
     ETLInfo,

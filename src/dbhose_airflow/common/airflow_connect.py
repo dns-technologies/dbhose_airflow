@@ -10,8 +10,8 @@ from base_dumper import (
     IsolationLevel,
 )
 
-from . import errors
-from .defines import FROM_CONNTYPE
+from . import defines
+from ..core import Error
 
 
 def get_basehook() -> object:
@@ -68,9 +68,9 @@ def define_dumper(
 
     try:
         conn_type, db_connector = define_connector(airflow_connection)
-        connection_params = FROM_CONNTYPE[conn_type]
+        connection_params = defines.FROM_CONNTYPE[conn_type]
     except KeyError:
-        raise errors.DBHoseTypeError(
+        raise Error.DBHoseTypeError(
             f"Bad connection type \"{conn_type}\"",
         )
 

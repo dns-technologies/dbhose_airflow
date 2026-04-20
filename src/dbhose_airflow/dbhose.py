@@ -20,6 +20,13 @@ from polars import (
 )
 
 from .common import (
+    define_dumper,
+    define_query,
+    get_logger,
+    logo,
+    wrap_frame,
+)
+from .core import (
     ConnectionConfig,
     DQCheck,
     DQConfig,
@@ -28,12 +35,7 @@ from .common import (
     ETLInfo,
     MoveMethod,
     TableMetadata,
-    define_dumper,
-    define_query,
     generate_ddl,
-    get_logger,
-    logo,
-    wrap_frame,
 )
 
 
@@ -52,7 +54,7 @@ class DBHose:
         move_method: MoveMethod = MoveMethod.replace,
         custom_move_sql: str | None = None,
         mode: DumperMode = DumperMode.DEBUG,
-        dump_format: DumpFormat | None = None,
+        dump_format: DumpFormat = DumpFormat.BINARY,
         dq: DQConfig | None = None,
     ) -> None:
         """Initialize DBHose orchestrator.
@@ -248,8 +250,6 @@ class DBHose:
         if not self.dump_format and self.dumper_src:
             if self.dumper_dest.__class__ is not self.dumper_src.__class__:
                 self.dump_format = DumpFormat.CSV
-            else:
-                self.dump_format = DumpFormat.BINARY
 
         if self.dq_extra_conn:
             self.dumper_dq = define_dumper(

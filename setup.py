@@ -7,7 +7,7 @@ with open(file="README.md", encoding="utf-8") as f:
 
 setup(
     name="dbhose_airflow",
-    version="0.2.0.dev1",
+    version="0.2.0.dev2",
     author="0xMihalich",
     author_email="bayanmobile87@gmail.com",
     description=(

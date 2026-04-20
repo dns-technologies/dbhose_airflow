@@ -1,5 +1,13 @@
 # Version History
 
+## 0.2.0.dev2
+
+* Developer release (not public to pip)
+* Add `DBHoseOperator`
+* Fix `DBHose.dump_format` parameter
+* Refactor `DBHose._initialize()` method
+* Move errors.py, ddl.py and structs.py into core
+
 ## 0.2.0.dev1
 
 * Developer release (not public to pip)

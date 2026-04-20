@@ -12,7 +12,8 @@ from base_dumper import (
     Timeout,
 )
 
-from .common import (
+from .common import logo
+from .core import (
     ConnectionConfig,
     ColumnMeta,
     DQCheck,
@@ -22,9 +23,9 @@ from .common import (
     MoveMethod,
     StagingConfig,
     TableMetadata,
-    logo,
 )
 from .dbhose import DBHose
+from .dbhose_operator import DBHoseOperator
 from .version import __version__
 
 
@@ -35,6 +36,7 @@ __all__ = (
     "CompressionMethod",
     "ConnectionConfig",
     "DBHose",
+    "DBHoseOperator",
     "DQCheck",
     "DQConfig",
     "DumperMode",

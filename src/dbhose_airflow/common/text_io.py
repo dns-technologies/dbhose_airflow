@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from . import errors
-from .structs import (
+from ..core import (
     DQCheck,
+    Error,
     MoveMethod,
 )
 
@@ -28,11 +28,11 @@ def define_query(dbname: str, kind: DQCheck | MoveMethod) -> str:
         path = str(__query_path).format(query_type, dbname, kind.name)
         return __read_text(path)
     except (KeyError, ValueError, TypeError) as error:
-        raise errors.DBHoseValueError(error)
+        raise Error.DBHoseValueError(error)
     except FileNotFoundError as error:
-        raise errors.DBHoseNotFoundError(error)
+        raise Error.DBHoseNotFoundError(error)
     except PermissionError as error:
-        raise errors.DBHosePermissionError(error)
+        raise Error.DBHosePermissionError(error)
 
 
 def logo() -> str:
