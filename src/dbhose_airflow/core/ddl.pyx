@@ -6,66 +6,73 @@ from native_dumper import HTTPCursor
 from nativelib import Column
 from psycopg import Cursor
 
-from . import errors
-from .ddl_core import (
+from dbhose_airflow.core.errors import (
+    DBHoseError,
+    DBHoseNotFoundError,
+    DBHoseTypeError,
+)
+from dbhose_airflow.core.ddl_core import (
     clickhouse_ddl,
     postgres_ddl,
 )
-from .structs import (
+from dbhose_airflow.core.structs import (
     ColumnMeta,
     ETLInfo,
     TableMetadata,
 )
 
 
-PRIMARY_KEY = compile(r"PRIMARY KEY\s*\(([^)]+)\)")
-SERVER_NAME = {
+cdef object PRIMARY_KEY = compile(r"PRIMARY KEY\s*\(([^)]+)\)")
+cdef dict SERVER_NAME = {
     HTTPCursor: clickhouse_ddl,
     Cursor: postgres_ddl,
 }
 
 
-def _normalize_postgres_meta(
-    meta: dict[str, list[dict[str, Any]]],
-) -> TableMetadata:
+cdef object _normalize_postgres_meta(dict meta):
     """Normalize PostgreSQL metadata."""
 
-    table_comment = None
+    cdef dict comment, constraint, col
+    cdef object table_comment = None
+    cdef str pk_def, engine, access_method
+    cdef object match, primary_key = None
+    cdef list comments = meta.get("comments", [])
+    cdef list columns_meta = meta.get("columns", [])
+    cdef list columns = []
+    cdef int num, attnum
 
-    for comment in meta.get("comments", []):
+    for comment in comments:
         if comment.get("objsubid") == 0:
             table_comment = comment.get("description")
             break
-
-    primary_key = None
 
     for constraint in meta.get("constraints", []):
         if constraint.get("contype") == "p":
             pk_def = constraint.get("condef", "")
             match = PRIMARY_KEY.search(pk_def)
             if match:
-                primary_key = [
-                    c.strip(' \t\n\r"') for c in match.group(1).split(",")
-                ]
+                primary_key = []
+                for c in match.group(1).split(","):
+                    primary_key.append(c.strip(' \t\n\r"'))
             break
 
     engine = meta.get("relkind", "TABLE")
     access_method = meta.get("access_method")
-    comments = meta.get("comments", [])
-    columns = []
 
     if access_method and access_method != "heap":
         engine = f"{engine}:{access_method}"
 
-    for num, col in enumerate(meta.get("columns", [])):
+    for num in range(len(columns_meta)):
+        col = columns_meta[num]
+        attnum = col.get("attnum", num + 1)
         columns.append(ColumnMeta(
             name=col.get("attname"),
             data_type=col.get("typname"),
             nullable=not col.get("attnotnull", False),
             has_default=col.get("atthasdef", False),
             default_value=col.get("defaultval"),
-            comment=_find_column_comment(comments, col.get("attnum")),
-            position=col.get("attnum", num + 1),
+            comment=_find_column_comment(comments, attnum),
+            position=attnum,
             type_oid=col.get("atttypid"),
             type_namespace=col.get("typnamespace"),
             generated=_pg_generated(col.get("attgenerated")),
@@ -87,15 +94,20 @@ def _normalize_postgres_meta(
     )
 
 
-def _normalize_clickhouse_meta(
-    meta: dict[str, list[dict[str, Any]]],
-) -> TableMetadata:
+cdef object _normalize_clickhouse_meta(dict meta):
     """Normalize ClickHouse metadata."""
 
-    engine = meta.get("engine") or "View"
-    columns = []
+    cdef str engine = meta.get("engine") or "View"
+    cdef list columns_meta = meta.get("columns", [])
+    cdef list columns = []
+    cdef int num
+    cdef dict col
+    cdef object column
+    cdef bint is_generated
+    cdef object generated
 
-    for num, col in enumerate(meta.get("columns", [])):
+    for num in range(len(columns_meta)):
+        col = columns_meta[num]
         column = Column(col.get("name"), col.get("data_type"))
         is_generated = col.get("default_kind") == "MATERIALIZED"
         generated = "STORED" if is_generated else None
@@ -128,18 +140,23 @@ def _normalize_clickhouse_meta(
     )
 
 
-def _find_column_comment(
-    comments: list[dict[str, Any]],
-    attnum: int,
-) -> str | None:
+cdef object _find_column_comment(list comments, int attnum):
     """Find comment for specific column by attnum."""
 
-    for comment in comments:
-        if comment.get("objsubid") == attnum:
+    cdef int i
+    cdef dict comment
+    cdef int objsubid
+
+    for i in range(len(comments)):
+        comment = comments[i]
+        objsubid = comment.get("objsubid", 0)
+        if objsubid == attnum:
             return comment.get("description")
 
+    return None
 
-def _pg_generated(value: str) -> str | None:
+
+cdef object _pg_generated(str value):
     """Convert PostgreSQL attgenerated to unified format."""
 
     if value == "s":
@@ -148,8 +165,10 @@ def _pg_generated(value: str) -> str | None:
     if value == "v":
         return "VIRTUAL"
 
+    return None
 
-def _pg_identity(value: str) -> str | None:
+
+cdef object _pg_identity(str value):
     """Convert PostgreSQL attidentity to unified format."""
 
     if value == "a":
@@ -158,27 +177,33 @@ def _pg_identity(value: str) -> str | None:
     if value == "d":
         return "BY DEFAULT"
 
+    return None
 
-def _parse_reloptions(options: list[str] | None) -> dict[str, str] | None:
+
+cdef object _parse_reloptions(list options):
     """Parse PostgreSQL reloptions array to dict."""
 
+    cdef int i
+    cdef str opt
+    cdef int eq_pos
+    cdef str k, v
+    cdef dict result = {}
+
     if not options:
-        return
+        return None
 
-    result = {}
+    for i in range(len(options)):
+        opt = options[i]
+        eq_pos = opt.find("=")
+        if eq_pos != -1:
+            k = opt[:eq_pos].strip(" \t\n\r")
+            v = opt[eq_pos + 1:].strip(" \t\n\r")
+            result[k] = v
 
-    for opt in options:
-        if "=" in opt:
-            k, v = opt.split("=", 1)
-            result[k.strip(" \t\n\r")] = v.strip(" \t\n\r")
-
-    return result
+    return result if result else None
 
 
-def normalize_metadata(
-    table_meta: dict[str, list[dict[str, Any]]],
-    is_postgres: bool,
-) -> TableMetadata:
+cdef object normalize_metadata(dict table_meta, bint is_postgres):
     """Convert PostgreSQL or ClickHouse metadata to unified format."""
 
     if is_postgres:
@@ -187,33 +212,40 @@ def normalize_metadata(
     return _normalize_clickhouse_meta(table_meta)
 
 
-def __validate_ddl(table_meta: dict[str, Any]) -> list[dict[str, Any]]:
+cdef list __validate_ddl(dict table_meta):
     """Validate DDL data."""
 
-    columns: list[dict[str, Any]] = table_meta.get("columns", [])
+    cdef list columns = table_meta.get("columns", [])
 
     if not columns:
-        raise errors.DBHoseNotFoundError(
+        raise DBHoseNotFoundError(
             "No columns found in table metadata",
         )
 
     return columns
 
 
-def __build_postgres_staging_ddl(
-    staging_table: str,
-    table_meta: dict[str, Any],
-) -> str:
+cdef str __build_postgres_staging_ddl(str staging_table, dict table_meta):
     """Build UNLOGGED staging table DDL for PostgreSQL/Greenplum."""
 
-    columns = __validate_ddl(table_meta)
-    col_defs = []
+    cdef list columns = __validate_ddl(table_meta)
+    cdef list col_defs = []
+    cdef int i
+    cdef dict col
+    cdef str col_name, col_type, col_def
+    cdef bint not_null
+    cdef str columns_str
+    cdef str ddl
+    cdef list distkey
+    cdef str partition_key
 
-    for col in columns:
+    for i in range(len(columns)):
+        col = columns[i]
         col_name = f'"{col["attname"]}"'
         col_type = col["typname"]
+        not_null = col.get("attnotnull", False)
 
-        if col.get("attnotnull"):
+        if not_null:
             col_def = f"    {col_name} {col_type} NOT NULL"
         else:
             col_def = f"    {col_name} {col_type}"
@@ -226,6 +258,7 @@ def __build_postgres_staging_ddl(
         f"{columns_str}\n"
         f") WITH (autovacuum_enabled = false)"
     )
+
     distkey = table_meta.get("distkey")
 
     if distkey:
@@ -240,15 +273,25 @@ def __build_postgres_staging_ddl(
     return ddl
 
 
-def __build_clickhouse_staging_ddl(
-    staging_table: str, table_meta: dict[str, Any]
-) -> str:
+cdef str __build_clickhouse_staging_ddl(str staging_table, dict table_meta):
     """Build staging table DDL for ClickHouse with MergeTree engine."""
 
-    columns = __validate_ddl(table_meta)
-    col_defs = []
+    cdef list columns = __validate_ddl(table_meta)
+    cdef list col_defs = []
+    cdef int i
+    cdef dict col
+    cdef str col_name, col_type
+    cdef str columns_str
+    cdef list order_by
+    cdef str order_by_str
+    cdef str partition_by
+    cdef str partition_clause
+    cdef dict settings
+    cdef dict table_settings
+    cdef str settings_str
 
-    for col in columns:
+    for i in range(len(columns)):
+        col = columns[i]
         col_name = f"`{col['name']}`"
         col_type = col["data_type"]
         col_defs.append(f"    {col_name} {col_type}")
@@ -267,10 +310,10 @@ def __build_clickhouse_staging_ddl(
         "index_granularity": 8192,
         "allow_suspicious_low_cardinality_types": 1,
     }
+    table_settings = table_meta.get("settings")
 
-    if table_settings := table_meta.get("settings"):
-        if "index_granularity" in table_settings:
-            settings.update(table_settings)
+    if table_settings and "index_granularity" in table_settings:
+        settings.update(table_settings)
 
     settings_str = ", ".join(f"{k} = {v}" for k, v in settings.items())
 
@@ -284,11 +327,11 @@ def __build_clickhouse_staging_ddl(
     )
 
 
-def build_staging_ddl(
-    staging_table: str,
-    table_meta: dict[str, Any],
-    is_postgres: bool,
-) -> str:
+cdef str build_staging_ddl(
+    str staging_table,
+    dict table_meta,
+    bint is_postgres,
+):
     """Generate DDL for staging table."""
 
     if is_postgres:
@@ -308,7 +351,7 @@ def generate_ddl(
     ddl_core = SERVER_NAME.get(cursor.__class__)
 
     if not ddl_core:
-        raise errors.DBHoseTypeError("No DDL method found.")
+        raise DBHoseTypeError("No DDL method found.")
 
     try:
         table_ddl, table_meta = ddl_core(cursor, table_name)
@@ -344,4 +387,4 @@ def generate_ddl(
             table_metadata=table_metadata,
         )
     except Exception as error:
-        raise errors.DBHoseError(error)
+        raise DBHoseError(error)

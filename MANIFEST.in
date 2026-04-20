@@ -5,6 +5,13 @@ include LICENSE
 include src/dbhose_airflow/common/renders/LOGO
 recursive-include src/dbhose_airflow *.sql
 
+exclude src/dbhose_airflow/core/*.c
+exclude src/dbhose_airflow/core/*.pyx
+exclude src/dbhose_airflow/core/*.pxd
+recursive-exclude src/dbhose_airflow *.c
+recursive-exclude src/dbhose_airflow *.pyx
+recursive-exclude src/dbhose_airflow *.pxd
+
 prune src/dbhose_airflow/core/ddl_core/target
 prune */target
 prune target

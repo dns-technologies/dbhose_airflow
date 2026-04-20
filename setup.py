@@ -1,6 +1,18 @@
-from setuptools import setup, find_packages
+from setuptools import (
+    Extension,
+    setup,
+    find_packages,
+)
 from setuptools_rust import RustExtension
+from Cython.Build import cythonize
 
+
+extensions = [
+    Extension(
+        "dbhose_airflow.core.ddl",
+        ["src/dbhose_airflow/core/ddl.pyx"],
+    ),
+]
 
 with open(file="README.md", encoding="utf-8") as f:
     long_description = f.read()
@@ -23,6 +35,7 @@ setup(
     },
     packages=find_packages(where="src"),
     package_dir={"": "src"},
+    ext_modules=cythonize(extensions, language_level="3"),
     rust_extensions=[
         RustExtension(
             "dbhose_airflow.core.ddl_core",

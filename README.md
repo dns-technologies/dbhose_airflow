@@ -35,7 +35,7 @@ Currently, data transfer is supported between the following databases:
 - DataFrames (Pandas/Polars)
 - Supported DBMS (ClickHouse, Greenplum, PostgreSQL)
 
-The class includes built-in Data Quality checks and supports various data movement methods.
+The class includes built-in Data Quality checks and supports various data movement methods. `DBHoseOperator` provides native Airflow integration for simplified DAG development.
 
 ## Installation
 
@@ -46,6 +46,8 @@ pip install dbhose-airflow -U --index-url https://dns-technologies.github.io/dbh
 ## Initialization
 
 ```python
+from dbhose_airflow import DBHose
+
 DBHose(
     destination_table: str,
     destination_conn: str | ConnectionConfig,
@@ -57,7 +59,7 @@ DBHose(
     move_method: MoveMethod = MoveMethod.replace,
     custom_move_sql: str | None = None,
     mode: DumperMode = DumperMode.DEBUG,
-    dump_format: DumpFormat | None = None,
+    dump_format: DumpFormat = DumpFormat.BINARY,
     dq: DQConfig | None = None,
 )
 ```
@@ -82,7 +84,7 @@ DBHose(
 | `move_method` | `MoveMethod` | `MoveMethod.replace` | Method for moving data from staging to destination |
 | `custom_move_sql` | `str \| None` | `None` | Custom SQL for `move_method.CUSTOM` |
 | `mode` | `DumperMode` | `DumperMode.DEBUG` | Operation mode (`DEBUG`, `TEST`, `PRODUCTION`) |
-| `dump_format` | `DumpFormat \| None` | `None` | Override dump format (auto-detected if `None`) |
+| `dump_format` | `DumpFormat` | `DumpFormat.BINARY` | Dump format for data transfer |
 | `dq` | `DQConfig \| None` | `None` | Data Quality check configuration |
 
 ## Configuration Classes
@@ -175,7 +177,9 @@ class DQConfig:
 
 ## Public Methods
 
-### `from_dbms(query: str | None = None, table: str | None = None) -> None`
+### DBHose Class
+
+#### `from_dbms(query: str | None = None, table: str | None = None) -> None`
 
 Upload data from another DBMS using SQL query or direct table export.
 
@@ -183,26 +187,58 @@ Upload data from another DBMS using SQL query or direct table export.
 - `query` (`str`, optional) – SQL query for data selection
 - `table` (`str`, optional) – Source table name for direct export
 
-### `from_file(fileobj: BufferedReader) -> None`
+#### `from_file(file_path: str | Path) -> None`
 
 Upload data from a dump file.
 
 **Parameters:**
-- `fileobj` (`BufferedReader`) – File object containing the dump
+- `file_path` (`str | Path`) – Path to the dump file
 
-### `from_iterable(dtype_data: Iterable[Any]) -> None`
+#### `from_iterable(dtype_data: Iterable[Any]) -> None`
 
 Upload data from a Python iterable.
 
 **Parameters:**
 - `dtype_data` (`Iterable[Any]`) – Iterable containing data rows
 
-### `from_frame(data_frame: PdFrame | PlFrame | LfFrame) -> None`
+#### `from_frame(data_frame: PdFrame | PlFrame | LfFrame) -> None`
 
 Upload data from a Pandas or Polars DataFrame.
 
 **Parameters:**
 - `data_frame` (`PdFrame | PlFrame | LfFrame`) – DataFrame to upload
+
+### DBHoseOperator Class
+
+Native Airflow operator for DBHose ETL operations with template fields support.
+
+```python
+from dbhose_airflow import DBHoseOperator
+
+DBHoseOperator(
+    task_id: str,
+    destination_table: str,
+    destination_conn: str | ConnectionConfig,
+    source_type: str = "dbms",
+    source_conn: str | ConnectionConfig | None = None,
+    source_query: str | None = None,
+    source_table: str | None = None,
+    source_file: str | Path | None = None,
+    source_iterable: Iterable[Any] | None = None,
+    source_frame: PdFrame | PlFrame | LfFrame | None = None,
+    dq_extra_conn: str | ConnectionConfig | None = None,
+    source_filter: list[str] | None = None,
+    staging: StagingConfig | None = None,
+    move_method: MoveMethod = MoveMethod.replace,
+    custom_move_sql: str | None = None,
+    mode: DumperMode = DumperMode.DEBUG,
+    dump_format: DumpFormat | None = None,
+    dq: DQConfig | None = None,
+    **kwargs,
+)
+```
+
+**Template Fields:** `destination_table`, `source_query`, `source_table`, `source_file`, `custom_move_sql`
 
 ## Usage Examples
 
@@ -237,7 +273,7 @@ dbhose = DBHose(
     destination_table="analytics.events",
     destination_conn="clickhouse_prod",
     source_conn="postgres_stage",
-    source_filter=["created_at >= '2024-01-01'", "status = 'active'"],
+    source_filter=["created_at", "status"],
     staging=StagingConfig(random_suffix=True, drop_after=True),
     move_method=MoveMethod.delete,
     dq=DQConfig(
@@ -272,7 +308,7 @@ dbhose = DBHose(
     destination_conn=dest_conn,
 )
 
-dbhose.from_file(open("facts_dump.zst", "rb"))
+dbhose.from_file("facts_dump.zst")
 ```
 
 ### Skip Staging Table
@@ -311,7 +347,37 @@ dbhose = DBHose(
 dbhose.from_dbms(table="metrics")
 ```
 
-### Airflow DAG Example
+### Airflow DAG with DBHoseOperator
+
+```python
+from datetime import datetime
+from airflow import DAG
+from dbhose_airflow import DBHoseOperator, MoveMethod, StagingConfig, DQConfig, DQCheck
+
+with DAG(
+    dag_id="dbhose_transfer",
+    start_date=datetime(2024, 1, 1),
+    schedule="@daily",
+    catchup=False,
+    tags=["etl", "analytics"],
+) as dag:
+    
+    transfer_task = DBHoseOperator(
+        task_id="transfer_daily_stats",
+        destination_table="analytics.daily_stats",
+        destination_conn="clickhouse_prod",
+        source_conn="postgres_stage",
+        source_table="daily_stats",
+        move_method=MoveMethod.replace,
+        staging=StagingConfig(random_suffix=True, drop_after=True),
+        dq=DQConfig(
+            disabled_checks=[DQCheck.future],
+            exclude_columns=["password_hash"],
+        ),
+    )
+```
+
+### Airflow DAG with PythonOperator (Legacy)
 
 ```python
 from datetime import datetime
@@ -414,9 +480,11 @@ All data loading methods (`from_dbms`, `from_file`, `from_iterable`, `from_frame
 - **Data Quality checks** – Built-in checks before final move
 - **Flexible move methods** – Multiple strategies for updating data
 - **Multiple source support** – Files, DataFrames, DBMS
+- **Native Airflow operator** – `DBHoseOperator` with template fields support
 - **Detailed logging** – All stages are logged with visual framing
 - **Automatic format detection** – BINARY or CSV format auto-selected based on source/destination compatibility
 - **Cross-platform column mapping** – Unified column metadata across PostgreSQL and ClickHouse
+- **Cython-optimized DDL generation** – Fast metadata extraction and staging DDL generation
 
 ## Beta Version Limitations
 
@@ -427,7 +495,7 @@ All data loading methods (`from_dbms`, `from_file`, `from_iterable`, `from_frame
 
 ## Requirements
 
-- Apache Airflow
+- Apache Airflow >= 2.0
 - Python >= 3.10
 - native-dumper (for ClickHouse)
 - pgpack-dumper (for PostgreSQL/Greenplum)

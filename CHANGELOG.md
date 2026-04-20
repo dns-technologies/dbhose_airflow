@@ -7,6 +7,9 @@
 * Fix `DBHose.dump_format` parameter
 * Refactor `DBHose._initialize()` method
 * Move errors.py, ddl.py and structs.py into core
+* Change language `generate_ddl()` function to Cython
+* Rewrite Python ddl.py to Cython ddl.pyx
+* Update `README.md`
 
 ## 0.2.0.dev1
 
