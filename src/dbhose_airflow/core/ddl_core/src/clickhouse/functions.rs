@@ -422,22 +422,75 @@ pub fn clickhouse_ddl(
     object_name: String,
 ) -> PyResult<(String, Py<PyDict>)> {
     let cursor_bound = cursor.bind(py);
-    let is_readonly: bool = cursor_bound.getattr("is_readonly")?.extract()?;
-    let object_type: String;
+    let headers = cursor_bound.getattr("headers")?;
+    let stream_type: String = cursor_bound.getattr("stream_type")?.extract()?;
+    headers.set_item("X-ClickHouse-Format", "Native")?;
+    let clean_name = object_name
+        .replace("`", "")
+        .replace("\"", "");
+    let result = (|| -> PyResult<(String, Py<PyDict>)> {
+        let is_readonly: bool = cursor_bound.getattr("is_readonly")?.extract()?;
+        let object_type: String;
 
-    if !is_readonly {
-        let query = format!(
-            r#"
-            SELECT multiIf(
-                engine IN ('View', 'MaterializedView'), 'View',
-                engine = 'Dictionary', 'Dictionary',
-                'Table'
-            ) AS object_type
-            FROM system.tables
-            WHERE concat(database, '.', name) = '{}'
-            "#,
-            object_name.replace("'", "''")
-        );
+        if !is_readonly {
+            let query = format!(
+                r#"
+                SELECT multiIf(
+                    engine IN ('View', 'MaterializedView'), 'View',
+                    engine = 'Dictionary', 'Dictionary',
+                    'Table'
+                ) AS object_type
+                FROM system.tables
+                WHERE concat(database, '.', name) = '{}'
+                "#,
+                clean_name.replace("'", "''")
+            );
+            let reader = cursor_bound.call_method1("get_stream", (query.as_str(),))?;
+            let rows = reader.call_method0("to_rows")?;
+            let row = match rows.call_method0("__next__") {
+                Ok(r) => r,
+                Err(_) => {
+                    reader.call_method0("close")?;
+                    return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                        format!("Object '{}' not found", object_name)
+                    ));
+                }
+            };
+            object_type = row.get_item(0)?.extract::<String>()?;
+            reader.call_method0("close")?;
+        } else {
+            let mut found = false;
+            let mut obj_type_str = String::new();
+
+            for obj_type in ["Table", "View", "Dictionary"] {
+                let query = format!("EXISTS {} {}", obj_type, clean_name);
+                let reader = cursor_bound.call_method1("get_stream", (query.as_str(),))?;
+                let rows = reader.call_method0("to_rows")?;
+
+                if let Ok(row) = rows.call_method0("__next__") {
+                    let exists: u8 = row.get_item(0)?.extract()?;
+                    reader.call_method0("close")?;
+
+                    if exists == 1 {
+                        obj_type_str = obj_type.to_string();
+                        found = true;
+                        break;
+                    }
+                } else {
+                    reader.call_method0("close")?;
+                }
+            }
+
+            if !found {
+                return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                    format!("Object '{}' not found", object_name)
+                ));
+            }
+
+            object_type = obj_type_str;
+        }
+
+        let query = format!("SHOW CREATE {} {}", object_type, object_name);
         let reader = cursor_bound.call_method1("get_stream", (query.as_str(),))?;
         let rows = reader.call_method0("to_rows")?;
         let row = match rows.call_method0("__next__") {
@@ -445,73 +498,30 @@ pub fn clickhouse_ddl(
             Err(_) => {
                 reader.call_method0("close")?;
                 return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                    format!("Object '{}' not found", object_name)
+                    format!("Failed to get DDL for '{}'", object_name)
                 ));
             }
         };
-        object_type = row.get_item(0)?.extract::<String>()?;
+        let ddl: String = row.get_item(0)?.extract()?;
         reader.call_method0("close")?;
-    } else {
-        let mut found = false;
-        let mut obj_type_str = String::new();
-
-        for obj_type in ["Table", "View", "Dictionary"] {
-            let query = format!("EXISTS {} {}", obj_type, object_name);
-            let reader = cursor_bound.call_method1("get_stream", (query.as_str(),))?;
-            let rows = reader.call_method0("to_rows")?;
-
-            if let Ok(row) = rows.call_method0("__next__") {
-                let exists: u8 = row.get_item(0)?.extract()?;
-                reader.call_method0("close")?;
-
-                if exists == 1 {
-                    obj_type_str = obj_type.to_string();
-                    found = true;
-                    break;
-                }
-            } else {
-                reader.call_method0("close")?;
-            }
-        }
-
-        if !found {
-            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                format!("Object '{}' not found", object_name)
-            ));
-        }
-
-        object_type = obj_type_str;
-    }
-
-    let query = format!("SHOW CREATE {} {}", object_type, object_name);
-    let reader = cursor_bound.call_method1("get_stream", (query.as_str(),))?;
-    let rows = reader.call_method0("to_rows")?;
-    let row = match rows.call_method0("__next__") {
-        Ok(r) => r,
-        Err(_) => {
-            reader.call_method0("close")?;
-            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                format!("Failed to get DDL for '{}'", object_name)
-            ));
-        }
-    };
-    let ddl: String = row.get_item(0)?.extract()?;
-    reader.call_method0("close")?;
-    let metadata = parse_clickhouse_ddl(&ddl)?;
-    let metadata_dict = PyDict::new(py);
-    metadata_dict.set_item("object_type", &metadata.object_type)?;
-    metadata_dict.set_item("database", &metadata.database)?;
-    metadata_dict.set_item("name", &metadata.name)?;
-    metadata_dict.set_item("engine", &metadata.engine)?;
-    metadata_dict.set_item("columns", struct_to_py_dict(py, &metadata.columns)?)?;
-    metadata_dict.set_item("partition_by", &metadata.partition_by)?;
-    metadata_dict.set_item("order_by", &metadata.order_by)?;
-    metadata_dict.set_item("primary_key", &metadata.primary_key)?;
-    metadata_dict.set_item("sample_by", &metadata.sample_by)?;
-    metadata_dict.set_item("ttl", &metadata.ttl)?;
-    metadata_dict.set_item("settings", struct_to_py_dict(py, &metadata.settings)?)?;
-    metadata_dict.set_item("as_select", &metadata.as_select)?;
-    metadata_dict.set_item("depends_on", &metadata.depends_on)?;
-    metadata_dict.set_item("comment", &metadata.comment)?;
-    Ok((ddl, metadata_dict.into()))
+        let metadata = parse_clickhouse_ddl(&ddl)?;
+        let metadata_dict = PyDict::new(py);
+        metadata_dict.set_item("object_type", &metadata.object_type)?;
+        metadata_dict.set_item("database", &metadata.database)?;
+        metadata_dict.set_item("name", &metadata.name)?;
+        metadata_dict.set_item("engine", &metadata.engine)?;
+        metadata_dict.set_item("columns", struct_to_py_dict(py, &metadata.columns)?)?;
+        metadata_dict.set_item("partition_by", &metadata.partition_by)?;
+        metadata_dict.set_item("order_by", &metadata.order_by)?;
+        metadata_dict.set_item("primary_key", &metadata.primary_key)?;
+        metadata_dict.set_item("sample_by", &metadata.sample_by)?;
+        metadata_dict.set_item("ttl", &metadata.ttl)?;
+        metadata_dict.set_item("settings", struct_to_py_dict(py, &metadata.settings)?)?;
+        metadata_dict.set_item("as_select", &metadata.as_select)?;
+        metadata_dict.set_item("depends_on", &metadata.depends_on)?;
+        metadata_dict.set_item("comment", &metadata.comment)?;
+        Ok((ddl, metadata_dict.into()))
+    })();
+    headers.set_item("X-ClickHouse-Format", stream_type)?;
+    result
 }

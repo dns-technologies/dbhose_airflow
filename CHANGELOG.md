@@ -7,6 +7,8 @@
 * Change `ddl.pyx`
 * Fix DumpFormat autodetection
 * Fix CSV mode
+* Fix clickhouse ddl object name in quotes not found
+* Fix read clickhouse ddl in CSV mode
 
 ## 0.2.0.dev3
 
