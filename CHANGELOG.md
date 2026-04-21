@@ -1,5 +1,13 @@
 # Version History
 
+## 0.2.0.dev4
+
+* Developer release (not public to pip)
+* Change `ETLInfo` structure
+* Change `ddl.pyx`
+* Fix DumpFormat autodetection
+* Fix CSV mode
+
 ## 0.2.0.dev3
 
 * Developer release (not public to pip)

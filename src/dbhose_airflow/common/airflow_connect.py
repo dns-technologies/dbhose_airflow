@@ -1,5 +1,7 @@
 from logging import Logger
 
+from native_dumper import CHConnector
+from pgpack_dumper import PGConnector
 from base_dumper import (
     CompressionLevel,
     CompressionMethod,
@@ -55,24 +57,41 @@ def define_connector(airflow_connection: str) -> tuple[str, DBConnector]:
 
 
 def define_dumper(
-    airflow_connection: str,
+    airflow_connection: str | DBConnector,
     compression_method: CompressionMethod = CompressionMethod.ZSTD,
     compression_level: int = CompressionLevel.ZSTD_DEFAULT,
     timeout: int | None = None,
     isolation: IsolationLevel = IsolationLevel.committed,
     mode: DumperMode = DumperMode.DEBUG,
-    dump_format: DumpFormat = DumpFormat.BINARY,
+    dump_format: DumpFormat | None = None,
     s3_file: bool = False,
 ) -> DumperType:
     """Define Dumper from airflow_connection string and additional params."""
 
     try:
-        conn_type, db_connector = define_connector(airflow_connection)
+        if isinstance(airflow_connection, DBConnector):
+            db_connector = airflow_connection
+
+            if isinstance(db_connector, CHConnector):
+                conn_type = "clickhouse"
+            elif isinstance(db_connector, PGConnector):
+                conn_type = "postgres"
+        elif isinstance(airflow_connection, str):
+            conn_type, db_connector = define_connector(airflow_connection)
+        else:
+            raise Error.DBHoseTypeError(
+                "connector must be airflow_conn_id or DBConnector or "
+                "ConnectionConfig struct",
+            )
+
         connection_params = defines.FROM_CONNTYPE[conn_type]
     except KeyError:
         raise Error.DBHoseTypeError(
             f"Bad connection type \"{conn_type}\"",
         )
+
+    if not dump_format:
+        dump_format = DumpFormat.BINARY
 
     connector: DBConnector = connection_params["connector"](*db_connector)
     return connection_params["dumper"](

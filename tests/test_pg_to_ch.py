@@ -105,7 +105,6 @@ class TestPGtoClickHouse:
             destination_conn="clickhouse_conn",
             source_conn="postgres_conn",
             mode=DumperMode.DEBUG,
-            dump_format=DumpFormat.BINARY,
             staging=StagingConfig(use_origin=True),
         )
         dbhose.from_dbms(
@@ -139,7 +138,6 @@ class TestPGtoClickHouse:
             destination_conn="clickhouse_conn",
             source_conn="postgres_conn",
             mode=DumperMode.DEBUG,
-            dump_format=DumpFormat.BINARY,
             staging=StagingConfig(drop_after=True, random_suffix=True),
             move_method=move_method,
         )

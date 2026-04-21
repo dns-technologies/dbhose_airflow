@@ -94,6 +94,7 @@ class ETLInfo:
     ddl: str
     staging_table: str
     staging_ddl: str
+    staging_ddl_simple: str
     table_metadata: TableMetadata
 
 

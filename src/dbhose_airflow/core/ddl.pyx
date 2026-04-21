@@ -225,8 +225,11 @@ cdef list __validate_ddl(dict table_meta):
     return columns
 
 
-cdef str __build_postgres_staging_ddl(str staging_table, dict table_meta):
-    """Build UNLOGGED staging table DDL for PostgreSQL/Greenplum."""
+cdef str __build_postgres_staging_ddl_simple(
+    str staging_table,
+    dict table_meta,
+):
+    """Build simple UNLOGGED staging table DDL for PostgreSQL."""
 
     cdef list columns = __validate_ddl(table_meta)
     cdef list col_defs = []
@@ -255,8 +258,7 @@ cdef str __build_postgres_staging_ddl(str staging_table, dict table_meta):
     columns_str = ",\n".join(col_defs)
     ddl = (
         f"CREATE UNLOGGED TABLE IF NOT EXISTS {staging_table} (\n"
-        f"{columns_str}\n"
-        f") WITH (autovacuum_enabled = false)"
+        f"{columns_str}\n) WITH (autovacuum_enabled = false)"
     )
 
     distkey = table_meta.get("distkey")
@@ -273,8 +275,53 @@ cdef str __build_postgres_staging_ddl(str staging_table, dict table_meta):
     return ddl
 
 
-cdef str __build_clickhouse_staging_ddl(str staging_table, dict table_meta):
-    """Build staging table DDL for ClickHouse with MergeTree engine."""
+cdef str __build_postgres_staging_ddl_full(
+    str staging_table,
+    dict table_meta,
+):
+    """Build full staging table DDL for PostgreSQL using LIKE."""
+
+    cdef str source_table = (
+        f"{table_meta['schema_name']}.{table_meta['relname']}"
+    )
+    return (
+        f"CREATE UNLOGGED TABLE IF NOT EXISTS {staging_table} "
+        f"(LIKE {source_table} INCLUDING ALL)"
+    )
+
+
+cdef str __build_clickhouse_staging_ddl_simple(
+    str staging_table,
+    dict table_meta,
+):
+    """Build simple staging table DDL for ClickHouse with Log engine."""
+
+    cdef list columns = __validate_ddl(table_meta)
+    cdef list col_defs = []
+    cdef int i
+    cdef dict col
+    cdef str col_name, col_type
+
+    for i in range(len(columns)):
+        col = columns[i]
+        col_name = f"`{col['name']}`"
+        col_type = col["data_type"]
+        col_defs.append(f"    {col_name} {col_type}")
+
+    columns_str = ",\n".join(col_defs)
+
+    return (
+        f"CREATE TABLE IF NOT EXISTS {staging_table} (\n"
+        f"{columns_str}\n)\nENGINE = Log\n"
+        "SETTINGS allow_suspicious_low_cardinality_types = 1"
+    )
+
+
+cdef str __build_clickhouse_staging_ddl_full(
+    str staging_table,
+    dict table_meta,
+):
+    """Build full staging table DDL for ClickHouse with MergeTree engine."""
 
     cdef list columns = __validate_ddl(table_meta)
     cdef list col_defs = []
@@ -303,7 +350,6 @@ cdef str __build_clickhouse_staging_ddl(str staging_table, dict table_meta):
 
     if order_by:
         for part in order_by:
-
             if "(" in part:
                 order_parts.append(part)
             else:
@@ -331,25 +377,30 @@ cdef str __build_clickhouse_staging_ddl(str staging_table, dict table_meta):
 
     return (
         f"CREATE TABLE IF NOT EXISTS {staging_table} (\n"
-        f"{columns_str}\n"
-        f")\n"
+        f"{columns_str}\n)\n"
         f"ENGINE = MergeTree{partition_clause}\n"
         f"ORDER BY {order_by_str}\n"
         f"SETTINGS {settings_str}"
     )
 
 
-cdef str build_staging_ddl(
+cdef tuple build_staging_ddls(
     str staging_table,
     dict table_meta,
     bint is_postgres,
 ):
-    """Generate DDL for staging table."""
+    """Generate both DDLs for staging table."""
 
     if is_postgres:
-        return __build_postgres_staging_ddl(staging_table, table_meta)
+        return (
+            __build_postgres_staging_ddl_full(staging_table, table_meta),
+            __build_postgres_staging_ddl_simple(staging_table, table_meta),
+        )
 
-    return __build_clickhouse_staging_ddl(staging_table, table_meta)
+    return (
+        __build_clickhouse_staging_ddl_full(staging_table, table_meta),
+        __build_clickhouse_staging_ddl_simple(staging_table, table_meta),
+    )
 
 
 def generate_ddl(
@@ -386,16 +437,18 @@ def generate_ddl(
             staging_table += token_bytes(4).hex()
 
         staging_table += _closing
-        staging_ddl = build_staging_ddl(
+        staging_ddl_full, staging_ddl_simple = build_staging_ddls(
             staging_table,
             table_meta,
             is_postgres,
         )
+
         return ETLInfo(
             name=table_name,
             ddl=table_ddl,
             staging_table=staging_table,
-            staging_ddl=staging_ddl,
+            staging_ddl=staging_ddl_full,
+            staging_ddl_simple=staging_ddl_simple,
             table_metadata=table_metadata,
         )
     except Exception as error:

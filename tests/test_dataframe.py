@@ -29,7 +29,9 @@ class TestDataFrame:
                     id Int32,
                     name String,
                     age Int32
-                ) ENGINE = Memory
+                ) ENGINE = MergeTree
+                PARTITION BY name
+                ORDER BY id
             """)
         ch_dumper.close()
 

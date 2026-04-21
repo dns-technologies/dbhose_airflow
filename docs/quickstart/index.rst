@@ -36,7 +36,7 @@
 
 .. code-block:: text
 
-    dbhose-airflow==0.2.0.dev3
+    dbhose-airflow==0.2.0.dev4
 
 Выполните пересборку образа:
 

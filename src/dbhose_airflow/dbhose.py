@@ -7,6 +7,7 @@ from typing import (
 )
 
 from base_dumper import (
+    DBConnector,
     DumperMode,
     DumperType,
     DumpFormat,
@@ -45,16 +46,16 @@ class DBHose:
     def __init__(
         self,
         destination_table: str,
-        destination_conn: str | ConnectionConfig,
-        source_conn: str | ConnectionConfig | None = None,
-        dq_extra_conn: str | ConnectionConfig | None = None,
+        destination_conn: str | ConnectionConfig | DBConnector,
+        source_conn: str | ConnectionConfig | DBConnector | None = None,
+        dq_extra_conn: str | ConnectionConfig | DBConnector | None = None,
         *,
         source_filter: list[str] | None = None,
         staging: StagingConfig | None = None,
         move_method: MoveMethod = MoveMethod.replace,
         custom_move_sql: str | None = None,
         mode: DumperMode = DumperMode.DEBUG,
-        dump_format: DumpFormat = DumpFormat.BINARY,
+        dump_format: DumpFormat | None = None,
         dq: DQConfig | None = None,
     ) -> None:
         """Initialize DBHose orchestrator.
@@ -133,7 +134,7 @@ class DBHose:
         return self._mode
 
     @property
-    def dump_format(self) -> DumpFormat:
+    def dump_format(self) -> DumpFormat | None:
         """Property method for get dump format."""
 
         return self._dump_format
@@ -201,7 +202,7 @@ class DBHose:
         if not connection:
             return
 
-        if isinstance(connection, str):
+        if isinstance(connection, (str, DBConnector)):
             if parent_config:
                 return ConnectionConfig(
                     connection,
@@ -217,7 +218,8 @@ class DBHose:
             return connection
 
         self.error_message(
-            "connector must be airflow_conn_id or ConnectionConfig struct",
+            "connector must be airflow_conn_id or DBConnector or "
+            "ConnectionConfig struct",
             Error.DBHoseValueError,
         )
 
@@ -246,10 +248,6 @@ class DBHose:
                 self.mode,
                 self.dump_format,
             )
-
-        if not self.dump_format and self.dumper_src:
-            if self.dumper_dest.__class__ is not self.dumper_src.__class__:
-                self.dump_format = DumpFormat.CSV
 
         if self.dq_extra_conn:
             self.dumper_dq = define_dumper(
@@ -287,6 +285,12 @@ class DBHose:
             else self.etl_info.staging_table
         )
         self.logger.info("ETL initialization completed")
+
+        if (
+            not self.dump_format and self.dumper_src
+            and self.dumper_dest.__class__ is not self.dumper_src.__class__
+        ):
+            self.dump_format = DumpFormat.CSV
 
     def _check_readonly(self) -> None:
         """Check if dumper_dest is in read-only mode."""

@@ -359,7 +359,8 @@ def dbhose_pg_to_ch(
                 id Int32,
                 name String,
                 age Int32
-            ) ENGINE = Memory
+            ) ENGINE = MergeTree
+            ORDER BY id
         """)
         ch_dumper.close()
         dbhose = DBHose(
