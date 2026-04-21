@@ -261,10 +261,10 @@ class DBHose:
                 self.mode,
                 self.dump_format,
             )
-        elif self.dq.use_source_conn:
-            self.dumper_dq = self.dumper_src
-        else:
+        elif self.dq.use_destination_conn:
             self.dumper_dq = self.dumper_dest
+        else:
+            self.dumper_dq = self.dumper_src
 
         self.logger.info("Fetching ETL metadata from destination server")
         self.etl_info = generate_ddl(
@@ -273,10 +273,10 @@ class DBHose:
             staging_random_suffix=self.staging.random_suffix,
         )
 
-        if self.dq.comparison_table:
+        if self.dq.comparison_object:
             self.logger.info("Fetching metadata for comparison table")
             self.comparison_metadata = generate_ddl(
-                self.dq.comparison_table,
+                self.dq.comparison_object,
                 self.dumper_dq.cursor,
                 skip_staging=True,
             )
@@ -393,7 +393,10 @@ class DBHose:
 
             self.logger.info(wrap_frame(f"{dq_check.description} test Pass"))
         except Error.DBHoseValueError as error:
-            self.error_message(error, Error.DBHoseValueError)
+            self.error_message(
+                f"{dq_check.description} test Fail: {error}",
+                Error.DBHoseValueError,
+            )
         except Exception as error:
             self.logger.error(wrap_frame(
                 f"{dq_check.description} test Fail: {error}",
@@ -409,7 +412,7 @@ class DBHose:
             ))
             return True
 
-        if dq_check.need_source_table and not self.dq.comparison_table:
+        if dq_check.need_source_table and not self.dq.comparison_object:
             self.logger.warning(wrap_frame(
                 f"{dq_check.description} test skipped [no comparison object]",
             ))
@@ -444,7 +447,7 @@ class DBHose:
         tests_src = self._fetch_tests(
             self.dumper_dq,
             query_src,
-            self.dq.comparison_table,
+            self.dq.comparison_object,
         )
 
         if not self._has_tests(tests_src):
@@ -487,7 +490,7 @@ class DBHose:
         """Run comparison check with a single query."""
 
         query_src = define_query(self.dumper_dq.dbname, dq_check).format(
-            table=self.dq.comparison_table,
+            table=self.dq.comparison_object,
         )
         query_dest = define_query(self.dumper_dest.dbname, dq_check).format(
             table=self.target_table,

@@ -124,6 +124,7 @@ class DQConfig:
     disabled_checks: list[DQCheck] = field(default_factory=list)
     custom_queries: list[str] = field(default_factory=list)
     exclude_columns: list[str] = field(default_factory=list)
+    filter_columns: list[str] = field(default_factory=list)
     column_mapping: dict[str, str] = field(default_factory=dict)
-    comparison_table: str | None = None
-    use_source_conn: bool = False
+    comparison_object: str | None = None
+    use_destination_conn: bool = False

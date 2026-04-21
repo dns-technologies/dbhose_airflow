@@ -1,5 +1,13 @@
 # Version History
 
+## 0.2.0.dev3
+
+* Developer release (not public to pip)
+* Change `DQConfig` structure
+* Rename `DQConfig`.`comparison_table` to `DQConfig`.`comparison_object`
+* Fix Clickhouse DDL parsing
+* Add DQ test description output for error tests
+
 ## 0.2.0.dev2
 
 * Developer release (not public to pip)

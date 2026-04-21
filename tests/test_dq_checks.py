@@ -65,7 +65,7 @@ class TestDQChecks:
             mode=DumperMode.DEBUG,
             dump_format=DumpFormat.BINARY,
             staging=StagingConfig(use_origin=True),  # без staging
-            dq=DQConfig(disabled_checks=[], comparison_table=None),
+            dq=DQConfig(disabled_checks=[], comparison_object=None),
         )
         dbhose.run_dq_checks()
 
@@ -81,7 +81,7 @@ class TestDQChecks:
             dump_format=DumpFormat.BINARY,
             staging=StagingConfig(use_origin=True),
             dq=DQConfig(
-                disabled_checks=[DQCheck.empty], comparison_table=None
+                disabled_checks=[DQCheck.empty], comparison_object=None
             ),
         )
         dbhose.run_dq_checks()

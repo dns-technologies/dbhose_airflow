@@ -237,31 +237,11 @@ fn extract_engine(ddl: &str) -> Option<String> {
 fn extract_clause(ddl: &str, clause: &str) -> Option<String> {
     let pattern = format!(r"(?i){}\s+", clause);
     let re_start = Regex::new(&pattern).unwrap();
-    
+
     if let Some(mat) = re_start.find(ddl) {
         let start = mat.end();
         let rest = &ddl[start..];
-        let keywords = [
-            "ORDER BY",
-            "PRIMARY KEY",
-            "SAMPLE BY",
-            "TTL",
-            "SETTINGS",
-            "COMMENT",
-            "PARTITION BY",
-        ];
-        let mut end = rest.len();
-
-        for kw in keywords.iter() {
-            let kw_pattern = format!(r"(?i)\s+{}\s+", kw);
-            let re_kw = Regex::new(&kw_pattern).unwrap();
-            if let Some(kw_mat) = re_kw.find(rest) {
-                if kw_mat.start() < end {
-                    end = kw_mat.start();
-                }
-            }
-        }
-
+        let end = rest.find('\n').unwrap_or(rest.len());
         Some(rest[..end].trim().to_string())
     } else {
         None
@@ -270,16 +250,50 @@ fn extract_clause(ddl: &str, clause: &str) -> Option<String> {
 
 
 fn extract_order_by(ddl: &str) -> Option<Vec<String>> {
-    let clause = extract_clause(ddl, "ORDER BY")?;
-    let inner = clause.trim_matches(|c| c == '(' || c == ')');
-    Some(inner.split(',').map(|s| s.trim().to_string()).collect())
+    extract_parenthesized_list(ddl, "ORDER BY")
 }
 
 
 fn extract_primary_key(ddl: &str) -> Option<Vec<String>> {
-    let clause = extract_clause(ddl, "PRIMARY KEY")?;
-    let inner = clause.trim_matches(|c| c == '(' || c == ')');
-    Some(inner.split(',').map(|s| s.trim().to_string()).collect())
+    extract_parenthesized_list(ddl, "PRIMARY KEY")
+}
+
+
+fn extract_parenthesized_list(ddl: &str, clause: &str) -> Option<Vec<String>> {
+    let clause_text = extract_clause(ddl, clause)?;
+    let inner = clause_text.trim();
+    let inner = if inner.starts_with('(') && inner.ends_with(')') {
+        &inner[1..inner.len()-1]
+    } else {
+        inner
+    };
+    let mut result = Vec::new();
+    let mut current = String::new();
+    let mut depth = 0;
+
+    for ch in inner.chars() {
+        match ch {
+            '(' => {
+                depth += 1;
+                current.push(ch);
+            }
+            ')' => {
+                depth -= 1;
+                current.push(ch);
+            }
+            ',' if depth == 0 => {
+                result.push(current.trim().to_string());
+                current.clear();
+            }
+            _ => current.push(ch),
+        }
+    }
+
+    if !current.trim().is_empty() {
+        result.push(current.trim().to_string());
+    }
+
+    Some(result)
 }
 
 

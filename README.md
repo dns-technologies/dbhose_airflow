@@ -140,7 +140,7 @@ class DQConfig:
     custom_queries: list[str] = field(default_factory=list)
     exclude_columns: list[str] = field(default_factory=list)
     column_mapping: dict[str, str] = field(default_factory=dict)
-    comparison_table: str | None = None
+    comparison_object: str | None = None
     use_source_conn: bool = False
 ```
 
@@ -150,7 +150,7 @@ class DQConfig:
 | `custom_queries` | `list[str]` | `[]` | Custom DQ query paths |
 | `exclude_columns` | `list[str]` | `[]` | Columns to exclude from DQ checks |
 | `column_mapping` | `dict[str, str]` | `{}` | Map comparison table column names for compare with destination table column names |
-| `comparison_table` | `str \| None` | `None` | Table to compare against for DQ checks |
+| `comparison_object` | `str \| None` | `None` | Table to compare against for DQ checks |
 | `use_source_conn` | `bool` | `False` | Use source connection for comparison table |
 
 ## Move Methods

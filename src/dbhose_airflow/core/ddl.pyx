@@ -289,6 +289,8 @@ cdef str __build_clickhouse_staging_ddl(str staging_table, dict table_meta):
     cdef dict settings
     cdef dict table_settings
     cdef str settings_str
+    cdef list order_parts = []
+    cdef str part
 
     for i in range(len(columns)):
         col = columns[i]
@@ -300,7 +302,17 @@ cdef str __build_clickhouse_staging_ddl(str staging_table, dict table_meta):
     order_by = table_meta.get("order_by")
 
     if order_by:
-        order_by_str = ", ".join(f"`{c}`" for c in order_by)
+        for part in order_by:
+
+            if "(" in part:
+                order_parts.append(part)
+            else:
+                order_parts.append(f"`{part}`")
+
+        order_by_str = ", ".join(order_parts)
+
+        if len(order_parts) > 1:
+            order_by_str = f"({order_by_str})"
     else:
         order_by_str = f"`{columns[0]['name']}`"
 
@@ -322,7 +334,7 @@ cdef str __build_clickhouse_staging_ddl(str staging_table, dict table_meta):
         f"{columns_str}\n"
         f")\n"
         f"ENGINE = MergeTree{partition_clause}\n"
-        f"ORDER BY ({order_by_str})\n"
+        f"ORDER BY {order_by_str}\n"
         f"SETTINGS {settings_str}"
     )
 
