@@ -48,7 +48,7 @@ class DBHoseOperator(BaseOperator):
     :param staging: Staging table configuration
     :param move_method: Method for moving data from staging to destination
     :param custom_move_sql: Custom SQL for move_method.CUSTOM
-    :param mode: Operation mode (DEBUG, TEST, PRODUCTION)
+    :param mode: Operation mode (DEBUG, TEST, PROD)
     :param dump_format: Override dump format (auto-detected if None)
     :param dq: Data Quality check configuration
     :param dbhose_kwargs: Additional keyword arguments for DBHose
@@ -77,7 +77,7 @@ class DBHoseOperator(BaseOperator):
         dq_extra_conn: str | ConnectionConfig | None = None,
         source_filter: list[str] | None = None,
         staging: StagingConfig | None = None,
-        move_method: MoveMethod = MoveMethod.replace,
+        move_method: MoveMethod = MoveMethod.AUTO,
         custom_move_sql: str | None = None,
         mode: DumperMode = DumperMode.DEBUG,
         dump_format: DumpFormat | None = None,

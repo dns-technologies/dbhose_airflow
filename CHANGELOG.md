@@ -1,5 +1,62 @@
 # Version History
 
+## 0.2.0.dev5
+
+* Developer release (not public to pip)
+* Developer release (not public to pip)
+* Add `MoveStrategy` system for flexible data movement from staging to destination
+* Add `MoveMethod` enum with strategies: `APPEND`, `REWRITE`, `DELETE`, `REPLACE`, `AUTO`, `CUSTOM`
+* Add `AppendStrategy` - simple INSERT from staging to destination using temp table
+* Add `RewriteStrategy` - TRUNCATE + INSERT for full table replacement
+* Add `DeleteStrategy` - DELETE matching rows + INSERT for incremental updates with partition optimization
+* Add `ReplaceStrategy` - atomic partition replacement:
+  - ClickHouse: `REPLACE PARTITION FROM`
+  - PostgreSQL: `ATTACH PARTITION`
+* Add `AutoStrategy` - automatic strategy selection based on table metadata and source filters
+* Add `CustomStrategy` - user-provided custom SQL for data movement
+* Add `get_move_strategy()` factory function for strategy instantiation
+* Add `staging_temp` and `staging_ddl_temp` to `ETLInfo` for temporary table support
+* Add `__build_staging_temp()` for temporary table name generation
+* Add `__build_postgres_staging_ddl_temp()` for PostgreSQL `TEMPORARY TABLE` DDL
+* Add `__build_clickhouse_staging_ddl_temp()` for ClickHouse `Memory` engine table DDL
+* Add `build_staging_ddls()` returning three DDL variants:
+  - `staging_ddl` - full structure (MergeTree / LIKE INCLUDING ALL)
+  - `staging_ddl_simple` - simplified (Log / UNLOGGED with columns only)
+  - `staging_ddl_temp` - temporary (Memory / TEMPORARY)
+* Remove legacy move methods:
+  - `_execute_custom_move`
+  - `_execute_sql_move`
+  - `_get_move_query`
+  - `_execute_direct_move`
+* Remove legacy validation methods:
+  - `_validate_move_requirements`
+  - `_is_unsupported_delete`
+* Refactor `DBHose` to delegate move logic to `MoveStrategy`
+* Refactor `DBHose.create_staging()` to use strategy-selected table and DDL
+* Refactor `DBHose.drop_staging()` to clean up both `staging_table` and `staging_temp`
+* Refactor `DBHose.move_to_destination()` to execute strategy
+* Add `_init_move_strategy()` method for strategy initialization
+* Update `StagingConfig` - remove unused `use_like` flag
+* Move strategies to `core/move.py`
+* Update `ETLInfo` structure - separate `staging_table`, `staging_temp`, and three DDL variants
+* Code cleanup across `ddl.pyx`, `move.py`, `dbhose.py`, `structs.py`
+* Fix DDL parsing for quoted object names (backtick and quote handling)
+* Fix DDL reading in CSV mode by preserving `stream_type` header
+* Fix column quoting in INSERT statements for cross-DBMS compatibility
+* Improve `ReplaceStrategy` - use `REPLACE PARTITION FROM` for atomic operations
+* Improve `DeleteStrategy` - partition-aware DELETE with `DELETE IN PARTITION`
+* Fix DDL generation - correct `PARTITION BY` and `DISTRIBUTED BY` ordering
+* Fix `ReplaceStrategy` - use MIN/MAX values for RANGE partitions with `ATTACH PARTITION`
+* Fix `DeleteStrategy` - use `USING` clause for efficient DELETE operations
+* Fix column quoting in INSERT statements
+* Fix `_is_postgres()` and `_is_clickhouse()` to use `isinstance()` correctly
+* Fix DumpFormat auto-detection for cross-DBMS transfers
+* Fix CSV mode for data transfer between different database types
+* Update `CHANGELOG.md` with comprehensive version history
+* Add docstrings for all strategy classes and methods
+* Update `README.md`
+* Update pytests
+
 ## 0.2.0.dev4
 
 * Developer release (not public to pip)

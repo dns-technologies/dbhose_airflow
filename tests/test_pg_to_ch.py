@@ -122,7 +122,7 @@ class TestPGtoClickHouse:
             assert result[2] == expected[2]  # noqa: S101
 
     @pytest.mark.parametrize(
-        "move_method", [MoveMethod.append, MoveMethod.rewrite]
+        "move_method", [MoveMethod.APPEND, MoveMethod.REWRITE]
     )
     def test_move_methods(
         self,

@@ -305,7 +305,7 @@ def dbhose_pg_to_ch(
 ):
     """Создает тестовую таблицу в PG и возвращает настроенный DBHose."""
     move_method = getattr(request, "param", {}).get(
-        "move_method", MoveMethod.replace
+        "move_method", MoveMethod.AUTO
     )
     staging = getattr(request, "param", {}).get(
         "staging", StagingConfig(drop_after=True, random_suffix=True)
@@ -326,7 +326,7 @@ def dbhose_pg_to_ch(
     pg_dumper.from_rows(test_rows, pg_table)
     pg_dumper.close()
 
-    basehook_path = get_basehook_path()  # <-- ИСПОЛЬЗУЕМ АДАПТИВНЫЙ ПУТЬ
+    basehook_path = get_basehook_path()
     with patch(f"{basehook_path}.get_connection") as mock_get:
         mock_pg = MagicMock()
         mock_pg.conn_type = "postgres"

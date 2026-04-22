@@ -36,22 +36,39 @@ class DQCheck(DQTest, Enum):
 
 
 class MoveType(NamedTuple):
-    """Move method object."""
+    """Move method metadata."""
 
-    name: str
-    have_sql: bool
-    need_filter: bool
-    is_custom: bool
+    description: str
+    requires_partition: bool = False
+    requires_filter: bool = False
+    use_temp_table: bool = False
 
 
 class MoveMethod(MoveType, Enum):
-    """Insert from temp table methods."""
+    """Data movement methods from staging to destination."""
 
-    append = MoveType("append", False, False, False)
-    custom = MoveType("custom", False, False, True)
-    delete = MoveType("delete", True, True, False)
-    replace = MoveType("replace", True, False, False)
-    rewrite = MoveType("rewrite", False, False, False)
+    APPEND = MoveType(
+        "Simple INSERT - adds new rows without deleting old ones",
+        use_temp_table=True,
+    )
+    REWRITE = MoveType(
+        "TRUNCATE + INSERT - completely replaces table content",
+        use_temp_table=True,
+    )
+    DELETE = MoveType(
+        "DELETE matching rows + INSERT - for incremental updates",
+        requires_filter=True,
+    )
+    REPLACE = MoveType(
+        "REPLACE/ATTACH PARTITION - atomic partition replacement",
+        requires_partition=True,
+    )
+    AUTO = MoveType(
+        "Automatically selects best strategy based on table metadata",
+    )
+    CUSTOM = MoveType(
+        "User-provided custom SQL for data movement",
+    )
 
 
 class ColumnMeta(NamedTuple):
@@ -93,8 +110,10 @@ class ETLInfo:
     name: str
     ddl: str
     staging_table: str
+    staging_temp: str
     staging_ddl: str
     staging_ddl_simple: str
+    staging_ddl_temp: str
     table_metadata: TableMetadata
 
 
@@ -113,9 +132,9 @@ class ConnectionConfig:
 class StagingConfig:
     """Configuration for staging table."""
 
+    use_origin: bool = False
     drop_after: bool = True
     random_suffix: bool = True
-    use_origin: bool = False
 
 
 @dataclass

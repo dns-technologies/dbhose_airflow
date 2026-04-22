@@ -248,8 +248,7 @@ fn generate_table_ddl(meta: &TableMetadata, opts: &DdlOptions) -> String {
 
         if meta.partition.is_partitioned && opts.include_partitions {
             if let Some(ref key) = meta.partition.partition_key {
-                let pos = ddl.rfind(");").unwrap_or(ddl.len());
-                ddl.insert_str(pos, &format!("\nPARTITION BY {}", key));
+                ddl.push_str(&format!("\nPARTITION BY {}", key));
             }
         }
 
@@ -351,7 +350,6 @@ fn generate_table_base(meta: &TableMetadata, opts: &DdlOptions) -> String {
         }
     }
 
-    ddl.push_str(";\n");
     ddl
 }
 

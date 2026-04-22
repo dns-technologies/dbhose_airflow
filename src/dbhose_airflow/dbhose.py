@@ -11,9 +11,7 @@ from base_dumper import (
     DumperMode,
     DumperType,
     DumpFormat,
-    chunk_query,
 )
-from native_dumper import NativeDumper
 from pandas import DataFrame as PdFrame
 from polars import (
     DataFrame as PlFrame,
@@ -35,8 +33,10 @@ from .core import (
     Error,
     ETLInfo,
     MoveMethod,
+    MoveStrategy,
     TableMetadata,
     generate_ddl,
+    get_move_strategy,
 )
 
 
@@ -52,7 +52,7 @@ class DBHose:
         *,
         source_filter: list[str] | None = None,
         staging: StagingConfig | None = None,
-        move_method: MoveMethod = MoveMethod.replace,
+        move_method: MoveMethod = MoveMethod.AUTO,
         custom_move_sql: str | None = None,
         mode: DumperMode = DumperMode.DEBUG,
         dump_format: DumpFormat | None = None,
@@ -73,22 +73,10 @@ class DBHose:
             staging: Staging table configuration
             move_method: Method for moving data from staging to destination
             custom_move_sql: Custom SQL for move_method.CUSTOM
-            mode: Operation mode (DEBUG, TEST, PRODUCTION)
+            mode: Operation mode (DEBUG, TEST, PROD)
             dump_format: Override dump format (auto-detected if None)
             dq: Data Quality check configuration
         """
-
-        if not destination_table:
-            self.error_message(
-                "destination_table is requiered.",
-                Error.DBHoseNotFoundError,
-            )
-
-        if not destination_conn:
-            self.error_message(
-                "destination_conn is requiered.",
-                Error.DBHoseNotFoundError,
-            )
 
         self.logger = get_logger()
         self.destination_table = destination_table
@@ -108,6 +96,7 @@ class DBHose:
         self.etl_info: ETLInfo | None = None
         self.target_table: str | None = None
         self.comparison_metadata: TableMetadata | None = None
+        self._move_strategy: MoveStrategy | None = None
         self._initialize()
 
     @property
@@ -168,12 +157,11 @@ class DBHose:
         """
 
         def wrapper(self: "DBHose", *args, **kwargs) -> None:
-
             try:
                 self.create_staging()
-                self.logger.info(wrap_frame(
-                    f"Loading data to {self.target_table} table"
-                ))
+                self.logger.info(
+                    wrap_frame(f"Loading data to {self.target_table} table")
+                )
                 dbhose_method(self, *args, **kwargs)
                 self.run_dq_checks()
                 self.move_to_destination()
@@ -279,18 +267,29 @@ class DBHose:
                 skip_staging=True,
             )
 
+        self._init_move_strategy()
         self.target_table = (
-            self.destination_table
-            if self.staging.use_origin
-            else self.etl_info.staging_table
+            self.destination_table if self.staging.use_origin else None
         )
         self.logger.info("ETL initialization completed")
 
         if (
-            not self.dump_format and self.dumper_src
+            not self.dump_format
+            and self.dumper_src
             and self.dumper_dest.__class__ is not self.dumper_src.__class__
         ):
             self.dump_format = DumpFormat.CSV
+
+    def _init_move_strategy(self) -> None:
+        """Initialize move strategy."""
+
+        self._move_strategy = get_move_strategy(
+            method=self.move_method,
+            dumper_dest=self.dumper_dest,
+            etl_info=self.etl_info,
+            source_filter=self.source_filter,
+            custom_sql=self.custom_move_sql,
+        )
 
     def _check_readonly(self) -> None:
         """Check if dumper_dest is in read-only mode."""
@@ -301,87 +300,6 @@ class DBHose:
                 "Check permissions.",
                 Error.DBHosePermissionError,
             )
-
-    def _validate_move_requirements(self) -> None:
-        """Validate that all requirements for the move method are met."""
-
-        if self.move_method.need_filter and not self.source_filter:
-            self.error_message(
-                "You must specify columns in source_filter",
-                Error.DBHoseValueError,
-            )
-
-        if self.move_method.is_custom and not self.custom_move_sql:
-            self.error_message(
-                "You must specify custom query in custom_move_sql",
-                Error.DBHoseValueError,
-            )
-
-        if self._is_unsupported_delete():
-            self.error_message(
-                "Too many columns in filter_by (> 4) for ClickHouse DELETE",
-                Error.DBHoseValueError,
-            )
-
-    def _is_unsupported_delete(self) -> bool:
-        """Check if DELETE method is used with unsupported configuration."""
-
-        return (
-            self.move_method is MoveMethod.delete
-            and self.dumper_dest.__class__ is NativeDumper
-            and len(self.source_filter) > 4
-        )
-
-    def _execute_custom_move(self) -> None:
-        """Execute custom SQL move."""
-
-        for query in sum(chunk_query(self.custom_move_sql), []):
-            self.dumper_dest.cursor.execute(query)
-
-    def _execute_sql_move(self) -> None:
-        """Execute SQL-based move (DELETE, REPLACE)."""
-
-        move_query = self._get_move_query()
-
-        for query in sum(chunk_query(move_query), []):
-            self.dumper_dest.cursor.execute(query)
-
-    def _get_move_query(self) -> str:
-        """Fetch and validate the SQL query for the move method."""
-
-        move_query = define_query(
-            self.dumper_dest.dbname,
-            self.move_method,
-        )
-        reader = self.dumper_dest.to_reader(move_query.format(
-            table_dest=self.destination_table,
-            table_temp=self.target_table,
-            filter_by=self.source_filter,
-        ))
-        is_available, query = tuple(*reader.to_rows())
-
-        if not is_available or not query:
-            self.error_message(
-                f"Method {self.move_method.name} is not available for "
-                f"{self.destination_table}. Use another method.",
-                Error.DBHoseValueError,
-            )
-
-        return query
-
-    def _execute_direct_move(self) -> None:
-        """Execute direct data move (APPEND, REWRITE)."""
-
-        if self.move_method is MoveMethod.rewrite:
-            self.logger.info("Clearing destination table")
-            self.dumper_dest.cursor.execute(
-                f"TRUNCATE TABLE {self.destination_table}"
-            )
-
-        self.dumper_dest.write_between(
-            self.destination_table,
-            self.target_table,
-        )
 
     def _run_single_check(self, dq_check: DQCheck) -> None:
         """Run a single DQ check."""
@@ -402,9 +320,11 @@ class DBHose:
                 Error.DBHoseValueError,
             )
         except Exception as error:
-            self.logger.error(wrap_frame(
-                f"{dq_check.description} test Fail: {error}",
-            ))
+            self.logger.error(
+                wrap_frame(
+                    f"{dq_check.description} test Fail: {error}",
+                )
+            )
             self.error_message(error)
 
     def _should_skip_check(self, dq_check: DQCheck) -> bool:
@@ -465,13 +385,15 @@ class DBHose:
             self.target_table,
         )
 
-        for (_, column_src, test_src) in tests_src:
+        for _, column_src, test_src in tests_src:
             column_dest = self.dq.column_mapping.get(column_src, column_src)
 
             if column_dest in self.dq.exclude_columns:
-                self.logger.warning(wrap_frame(
-                    f"Check column \"{column_dest}\" test skipped by user",
-                ))
+                self.logger.warning(
+                    wrap_frame(
+                        f'Check column "{column_dest}" test skipped by user',
+                    )
+                )
                 continue
 
             matching_test = self._find_matching_test(tests_dest, column_dest)
@@ -485,10 +407,12 @@ class DBHose:
                     column_src,
                 )
             else:
-                self.logger.warning(wrap_frame(
-                    f"Check column \"{column_src}\" test "
-                    "Skip [no column for test]",
-                ))
+                self.logger.warning(
+                    wrap_frame(
+                        f'Check column "{column_src}" test '
+                        "Skip [no column for test]",
+                    )
+                )
 
     def _run_comparison_single_query(self, dq_check: DQCheck) -> None:
         """Run comparison check with a single query."""
@@ -522,7 +446,7 @@ class DBHose:
             self.target_table,
         )
 
-        for (have_test, column_name, query) in tests:
+        for have_test, column_name, query in tests:
             if not have_test:
                 self.logger.warning(wrap_frame(
                     f"{dq_check.description} test Skip [no column for test]",
@@ -559,7 +483,7 @@ class DBHose:
     def _find_matching_test(self, tests: list, column_name: str) -> str | None:
         """Find test query for a specific column."""
 
-        for (_, col, test) in tests:
+        for _, col, test in tests:
             if col == column_name:
                 return test
 
@@ -578,7 +502,7 @@ class DBHose:
 
         if value_src != value_dest:
             self.error_message(
-                f"Check column \"{column_name}\" test Fail: "
+                f'Check column "{column_name}" test Fail: '
                 f"value {value_src} <> {value_dest}",
                 Error.DBHoseValueError,
             )
@@ -593,7 +517,7 @@ class DBHose:
 
         if result == "Fail":
             self.error_message(
-                f"Check column \"{column_name}\" test "
+                f'Check column "{column_name}" test '
                 f"Fail with {value} error rows",
                 Error.DBHoseValueError,
             )
@@ -607,54 +531,60 @@ class DBHose:
         return next(iter(reader.to_rows()))
 
     def create_staging(self) -> None:
-        """Create staging table."""
+        """Create staging table based on strategy."""
 
-        if not self.staging.use_origin:
-            self.logger.info(wrap_frame(
-                f"Creating staging table {self.etl_info.staging_table}",
-            ))
-            self.dumper_dest.cursor.execute(self.etl_info.staging_ddl)
-            self.logger.info(wrap_frame(
-                f"Staging table {self.etl_info.staging_table} created",
-            ))
+        if self.staging.use_origin:
+            return
+
+        target_table = self._move_strategy.get_target_table()
+        ddl = self._move_strategy.get_ddl()
+        self.logger.info(wrap_frame(f"Creating staging table {target_table}"))
+        self.dumper_dest.cursor.execute(ddl)
+        self.logger.info(wrap_frame(f"Staging table {target_table} created"))
+        self.target_table = target_table
 
     def drop_staging(self) -> None:
         """Drop staging table if configured."""
 
-        if not self.staging.use_origin:
-            if not self.staging.drop_after:
-                return self.logger.warning(wrap_frame(
-                    "Staging table drop skipped by configuration",
-                ))
+        if self.staging.use_origin:
+            return
 
-            self.logger.info("Dropping staging table")
-            self.dumper_dest.cursor.execute(
-                f"DROP TABLE IF EXISTS {self.etl_info.staging_table}",
+        if not self.staging.drop_after:
+            return self.logger.warning(
+                wrap_frame(
+                    "Staging table drop skipped by configuration",
+                )
             )
-            self.logger.info(wrap_frame(
-                f"Staging table {self.etl_info.staging_table} dropped",
-            ))
+
+        tables_to_drop = [
+            self.etl_info.staging_table,
+            self.etl_info.staging_temp,
+        ]
+        self.logger.info("Dropping staging tables")
+
+        for table in tables_to_drop:
+            try:
+                self.dumper_dest.cursor.execute(
+                    f"DROP TABLE IF EXISTS {table}"
+                )
+                self.logger.info(wrap_frame(f"Staging table {table} dropped"))
+            except Exception as error:
+                self.logger.warning(f"Failed to drop {table}: {error}")
 
     def move_to_destination(self) -> None:
         """Move data from staging to destination table."""
 
-        if not self.staging.use_origin:
-            self.logger.info(wrap_frame(
-                f"Moving data using method: {self.move_method.name}",
-            ))
-            self.dump_format = DumpFormat.BINARY
-            self._validate_move_requirements()
+        if self.staging.use_origin:
+            return
 
-            if self.move_method.is_custom:
-                self._execute_custom_move()
-            elif self.move_method.have_sql:
-                self._execute_sql_move()
-            else:
-                self._execute_direct_move()
-
-            self.logger.info(wrap_frame(
-                f"Data moved into {self.destination_table}",
-            ))
+        self.logger.info(wrap_frame(
+            f"Moving data using method: {self.move_method.name}",
+        ))
+        self.dump_format = DumpFormat.BINARY
+        self._move_strategy.execute()
+        self.logger.info(wrap_frame(
+            f"Data moved into {self.destination_table}",
+        ))
 
     def run_dq_checks(self) -> None:
         """Run configured Data Quality checks."""

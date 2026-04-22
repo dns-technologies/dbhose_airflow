@@ -225,6 +225,20 @@ cdef list __validate_ddl(dict table_meta):
     return columns
 
 
+cdef str __build_staging_temp(
+    str name,
+    bint staging_random_suffix,
+):
+    """Build temporary table name (without schema)."""
+
+    cdef str staging_temp = f"{name}_temp"
+
+    if staging_random_suffix:
+        staging_temp += token_bytes(4).hex()
+
+    return staging_temp
+
+
 cdef str __build_postgres_staging_ddl_simple(
     str staging_table,
     dict table_meta,
@@ -287,6 +301,41 @@ cdef str __build_postgres_staging_ddl_full(
     return (
         f"CREATE UNLOGGED TABLE IF NOT EXISTS {staging_table} "
         f"(LIKE {source_table} INCLUDING ALL)"
+    )
+
+
+cdef str __build_postgres_staging_ddl_temp(
+    str staging_temp,
+    dict table_meta,
+):
+    """Build TEMPORARY staging table DDL for PostgreSQL."""
+
+    cdef list columns = __validate_ddl(table_meta)
+    cdef list col_defs = []
+    cdef int i
+    cdef dict col
+    cdef str col_name, col_type, col_def
+    cdef bint not_null
+    cdef str columns_str
+
+    for i in range(len(columns)):
+        col = columns[i]
+        col_name = f'"{col["attname"]}"'
+        col_type = col["typname"]
+        not_null = col.get("attnotnull", False)
+
+        if not_null:
+            col_def = f"    {col_name} {col_type} NOT NULL"
+        else:
+            col_def = f"    {col_name} {col_type}"
+
+        col_defs.append(col_def)
+
+    columns_str = ",\n".join(col_defs)
+    return (
+        f"CREATE TEMPORARY TABLE IF NOT EXISTS \"{staging_temp}\" (\n"
+        f"{columns_str}\n"
+        f")"
     )
 
 
@@ -384,22 +433,52 @@ cdef str __build_clickhouse_staging_ddl_full(
     )
 
 
+cdef str __build_clickhouse_staging_ddl_temp(
+    str staging_temp,
+    dict table_meta,
+):
+    """Build temporary staging table DDL for ClickHouse with Memory engine."""
+    
+    cdef list columns = __validate_ddl(table_meta)
+    cdef list col_defs = []
+    cdef int i
+    cdef dict col
+    cdef str col_name, col_type
+    
+    for i in range(len(columns)):
+        col = columns[i]
+        col_name = f"`{col['name']}`"
+        col_type = col["data_type"]
+        col_defs.append(f"    {col_name} {col_type}")
+    
+    columns_str = ",\n".join(col_defs)
+    
+    return (
+        f"CREATE TABLE IF NOT EXISTS `{staging_temp}` (\n"
+        f"{columns_str}\n)\nENGINE = Memory\n"
+        "SETTINGS allow_suspicious_low_cardinality_types = 1"
+    )
+
+
 cdef tuple build_staging_ddls(
     str staging_table,
+    str staging_temp,
     dict table_meta,
     bint is_postgres,
 ):
-    """Generate both DDLs for staging table."""
+    """Generate all three DDLs for staging tables."""
 
     if is_postgres:
         return (
             __build_postgres_staging_ddl_full(staging_table, table_meta),
             __build_postgres_staging_ddl_simple(staging_table, table_meta),
+            __build_postgres_staging_ddl_temp(staging_temp, table_meta),
         )
 
     return (
         __build_clickhouse_staging_ddl_full(staging_table, table_meta),
         __build_clickhouse_staging_ddl_simple(staging_table, table_meta),
+        __build_clickhouse_staging_ddl_temp(staging_temp, table_meta),
     )
 
 
@@ -437,8 +516,17 @@ def generate_ddl(
             staging_table += token_bytes(4).hex()
 
         staging_table += _closing
-        staging_ddl_full, staging_ddl_simple = build_staging_ddls(
+        staging_temp = __build_staging_temp(
+            table_metadata.name,
+            staging_random_suffix,
+        )
+        (
+            staging_ddl_full,
+            staging_ddl_simple,
+            staging_ddl_temp,
+        ) = build_staging_ddls(
             staging_table,
+            staging_temp,
             table_meta,
             is_postgres,
         )
@@ -447,8 +535,10 @@ def generate_ddl(
             name=table_name,
             ddl=table_ddl,
             staging_table=staging_table,
+            staging_temp=staging_temp,
             staging_ddl=staging_ddl_full,
             staging_ddl_simple=staging_ddl_simple,
+            staging_ddl_temp=staging_ddl_temp,
             table_metadata=table_metadata,
         )
     except Exception as error:

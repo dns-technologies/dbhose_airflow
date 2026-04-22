@@ -10,11 +10,11 @@ cdef object _parse_reloptions(list options)
 
 cdef object normalize_metadata(dict table_meta, bint is_postgres)
 cdef list __validate_ddl(dict table_meta)
-cdef str __build_clickhouse_staging_ddl_full(
-    str staging_table,
-    dict table_meta,
+cdef str __build_staging_temp(
+    str name,
+    bint staging_random_suffix,
 )
-cdef str __build_clickhouse_staging_ddl_simple(
+cdef str __build_postgres_staging_ddl_simple(
     str staging_table,
     dict table_meta,
 )
@@ -22,12 +22,25 @@ cdef str __build_postgres_staging_ddl_full(
     str staging_table,
     dict table_meta,
 )
-cdef str __build_postgres_staging_ddl_simple(
+cdef str __build_postgres_staging_ddl_temp(
+    str staging_temp,
+    dict table_meta,
+)
+cdef str __build_clickhouse_staging_ddl_simple(
     str staging_table,
+    dict table_meta,
+)
+cdef str __build_clickhouse_staging_ddl_full(
+    str staging_table,
+    dict table_meta,
+)
+cdef str __build_clickhouse_staging_ddl_temp(
+    str staging_temp,
     dict table_meta,
 )
 cdef tuple build_staging_ddls(
     str staging_table,
+    str staging_temp,
     dict table_meta,
     bint is_postgres,
 )

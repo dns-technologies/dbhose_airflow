@@ -50,16 +50,16 @@ from dbhose_airflow import DBHose
 
 DBHose(
     destination_table: str,
-    destination_conn: str | ConnectionConfig,
-    source_conn: str | ConnectionConfig | None = None,
-    dq_extra_conn: str | ConnectionConfig | None = None,
+    destination_conn: str | ConnectionConfig | DBConnector,
+    source_conn: str | ConnectionConfig | DBConnector | None = None,
+    dq_extra_conn: str | ConnectionConfig | DBConnector | None = None,
     *,
     source_filter: list[str] | None = None,
     staging: StagingConfig | None = None,
-    move_method: MoveMethod = MoveMethod.replace,
+    move_method: MoveMethod = MoveMethod.AUTO,
     custom_move_sql: str | None = None,
     mode: DumperMode = DumperMode.DEBUG,
-    dump_format: DumpFormat = DumpFormat.BINARY,
+    dump_format: DumpFormat | None = None,
     dq: DQConfig | None = None,
 )
 ```
@@ -71,21 +71,42 @@ DBHose(
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `destination_table` | `str` | Fully qualified destination table name (e.g., `"schema.table"`) |
-| `destination_conn` | `str \| ConnectionConfig` | Destination connection Airflow conn_id or configuration |
+| `destination_conn` | `str \| ConnectionConfig \| DBConnector` | Destination connection Airflow conn_id, configuration, or DBConnector instance |
 
 ### Optional Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `source_conn` | `str \| ConnectionConfig \| None` | `None` | Source connection (if `None`, destination is used) |
-| `dq_extra_conn` | `str \| ConnectionConfig \| None` | `None` | External connection for DQ comparison table |
+| `source_conn` | `str \| ConnectionConfig \| DBConnector \| None` | `None` | Source connection (if `None`, destination is used) |
+| `dq_extra_conn` | `str \| ConnectionConfig \| DBConnector \| None` | `None` | External connection for DQ comparison table |
 | `source_filter` | `list[str] \| None` | `None` | List of columns for auto generate filter expressions to insert into source table |
 | `staging` | `StagingConfig \| None` | `None` | Staging table configuration |
-| `move_method` | `MoveMethod` | `MoveMethod.replace` | Method for moving data from staging to destination |
+| `move_method` | `MoveMethod` | `MoveMethod.AUTO` | Method for moving data from staging to destination |
 | `custom_move_sql` | `str \| None` | `None` | Custom SQL for `move_method.CUSTOM` |
 | `mode` | `DumperMode` | `DumperMode.DEBUG` | Operation mode (`DEBUG`, `TEST`, `PRODUCTION`) |
-| `dump_format` | `DumpFormat` | `DumpFormat.BINARY` | Dump format for data transfer |
+| `dump_format` | `DumpFormat \| None` | `None` | Dump format for data transfer (auto-detected if `None`) |
 | `dq` | `DQConfig \| None` | `None` | Data Quality check configuration |
+
+## Move Methods
+
+| Method | Description | Requires Partition | Requires Filter | Uses Temp Table |
+|--------|-------------|--------------------|-----------------|-----------------|
+| `APPEND` | Simple INSERT - adds new rows without deleting old ones | No | No | Yes |
+| `REWRITE` | TRUNCATE + INSERT - completely replaces table content | No | No | Yes |
+| `DELETE` | DELETE matching rows + INSERT - for incremental updates | No | Yes | No |
+| `REPLACE` | REPLACE/ATTACH PARTITION - atomic partition replacement | Yes | No | No |
+| `AUTO` | Automatically selects best strategy based on table metadata | - | - | - |
+| `CUSTOM` | User-provided custom SQL for data movement | No | No | No |
+
+### Move Strategy Auto-Selection
+
+When `move_method=MoveMethod.AUTO`, DBHose automatically selects the optimal strategy:
+
+| Condition | Selected Strategy |
+|-----------|-------------------|
+| `source_filter` is provided | `DELETE` |
+| Table has partitions AND no `source_filter` | `REPLACE` |
+| No partitions AND no `source_filter` | `REWRITE` |
 
 ## Configuration Classes
 
@@ -118,16 +139,16 @@ Configuration for staging table behavior.
 ```python
 @dataclass
 class StagingConfig:
+    use_origin: bool = False
     drop_after: bool = True
     random_suffix: bool = True
-    use_origin: bool = False
 ```
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
+| `use_origin` | `bool` | `False` | Skip staging table, write directly to destination |
 | `drop_after` | `bool` | `True` | Drop staging table after operation |
 | `random_suffix` | `bool` | `True` | Add random suffix to staging table name |
-| `use_origin` | `bool` | `False` | Skip staging table, write directly to destination |
 
 ### DQConfig
 
@@ -139,9 +160,10 @@ class DQConfig:
     disabled_checks: list[DQCheck] = field(default_factory=list)
     custom_queries: list[str] = field(default_factory=list)
     exclude_columns: list[str] = field(default_factory=list)
+    filter_columns: list[str] = field(default_factory=list)
     column_mapping: dict[str, str] = field(default_factory=dict)
     comparison_object: str | None = None
-    use_source_conn: bool = False
+    use_destination_conn: bool = False
 ```
 
 | Field | Type | Default | Description |
@@ -149,19 +171,75 @@ class DQConfig:
 | `disabled_checks` | `list[DQCheck]` | `[]` | List of DQ checks to skip |
 | `custom_queries` | `list[str]` | `[]` | Custom DQ query paths |
 | `exclude_columns` | `list[str]` | `[]` | Columns to exclude from DQ checks |
+| `filter_columns` | `list[str]` | `[]` | Columns to include for filter-based checks |
 | `column_mapping` | `dict[str, str]` | `{}` | Map comparison table column names for compare with destination table column names |
 | `comparison_object` | `str \| None` | `None` | Table to compare against for DQ checks |
-| `use_source_conn` | `bool` | `False` | Use source connection for comparison table |
+| `use_destination_conn` | `bool` | `False` | Use destination connection for comparison table |
 
-## Move Methods
+## Data Structures
 
-| Method | Description | Requires Filter | Uses SQL |
-|--------|-------------|-----------------|----------|
-| `append` | Append data to existing table | No | No |
-| `replace` | Replace data atomically | No | Yes |
-| `delete` | Delete matching rows before insert | Yes | Yes |
-| `rewrite` | Truncate and rewrite entire table | No | No |
-| `custom` | Use custom SQL for move operation | No | Yes |
+### ETLInfo
+
+Structure returned by DDL generation.
+
+```python
+@dataclass
+class ETLInfo:
+    name: str
+    ddl: str
+    staging_table: str
+    staging_temp: str
+    staging_ddl: str
+    staging_ddl_simple: str
+    staging_ddl_temp: str
+    table_metadata: TableMetadata
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | `str` | Fully qualified destination table name |
+| `ddl` | `str` | Original DDL of destination table |
+| `staging_table` | `str` | Full staging table name with schema |
+| `staging_temp` | `str` | Temporary table name (without schema) |
+| `staging_ddl` | `str` | Full DDL for staging table (MergeTree / LIKE INCLUDING ALL) |
+| `staging_ddl_simple` | `str` | Simplified DDL (Log / UNLOGGED with columns only) |
+| `staging_ddl_temp` | `str` | DDL for temporary table (Memory / TEMPORARY) |
+| `table_metadata` | `TableMetadata` | Complete table metadata |
+
+### MoveMethod
+
+```python
+class MoveType(NamedTuple):
+    description: str
+    requires_partition: bool = False
+    requires_filter: bool = False
+    use_temp_table: bool = False
+
+
+class MoveMethod(MoveType, Enum):
+    APPEND = MoveType(
+        "Simple INSERT - adds new rows without deleting old ones",
+        use_temp_table=True,
+    )
+    REWRITE = MoveType(
+        "TRUNCATE + INSERT - completely replaces table content",
+        use_temp_table=True,
+    )
+    DELETE = MoveType(
+        "DELETE matching rows + INSERT - for incremental updates",
+        requires_filter=True,
+    )
+    REPLACE = MoveType(
+        "REPLACE/ATTACH PARTITION - atomic partition replacement",
+        requires_partition=True,
+    )
+    AUTO = MoveType(
+        "Automatically selects best strategy based on table metadata",
+    )
+    CUSTOM = MoveType(
+        "User-provided custom SQL for data movement",
+    )
+```
 
 ## DQ Checks
 
@@ -241,6 +319,88 @@ DBHoseOperator(
 **Template Fields:** `destination_table`, `source_query`, `source_table`, `source_file`, `custom_move_sql`
 
 ## Usage Examples
+
+### Using DBConnector Directly
+
+```python
+from dbhose_airflow import DBHose, MoveMethod
+from native_dumper import CHConnector
+from pgpack_dumper import PGConnector
+
+# Create connectors directly
+pg_connector = PGConnector(
+    host="localhost",
+    dbname="source_db",
+    user="postgres",
+    password="secret",
+    port=5432,
+)
+
+ch_connector = CHConnector(
+    host="localhost",
+    dbname="dest_db",
+    user="default",
+    password="secret",
+    port=8123,
+)
+
+dbhose = DBHose(
+    destination_table="analytics.events",
+    destination_conn=ch_connector,  # Direct DBConnector
+    source_conn=pg_connector,       # Direct DBConnector
+    move_method=MoveMethod.AUTO,
+)
+
+dbhose.from_dbms(table="public.raw_events")
+```
+
+### Auto Strategy Selection
+
+```python
+from dbhose_airflow import DBHose, MoveMethod, StagingConfig
+
+# AUTO will select DELETE strategy because source_filter is provided
+dbhose = DBHose(
+    destination_table="analytics.daily_stats",
+    destination_conn="clickhouse_prod",
+    source_conn="postgres_stage",
+    source_filter=["date", "region"],  # Triggers DELETE strategy
+    move_method=MoveMethod.AUTO,
+    staging=StagingConfig(random_suffix=True),
+)
+
+dbhose.from_dbms(table="daily_stats")
+```
+
+### Using Different Move Strategies
+
+```python
+from dbhose_airflow import DBHose, MoveMethod
+
+# APPEND - fast insert using temp table
+dbhose_append = DBHose(
+    destination_table="logs.app_events",
+    destination_conn="clickhouse_prod",
+    move_method=MoveMethod.APPEND,
+)
+dbhose_append.from_file("events_dump.zst")
+
+# REWRITE - full table replacement
+dbhose_rewrite = DBHose(
+    destination_table="reference.dictionary",
+    destination_conn="postgres_prod",
+    move_method=MoveMethod.REWRITE,
+)
+dbhose_rewrite.from_iterable(dict_data)
+
+# REPLACE - atomic partition replacement (requires partitioned table)
+dbhose_replace = DBHose(
+    destination_table="analytics.monthly_stats",
+    destination_conn="clickhouse_prod",
+    move_method=MoveMethod.REPLACE,
+)
+dbhose_replace.from_dbms(table="monthly_stats")
+```
 
 ### Basic Transfer Between Databases
 
@@ -476,15 +636,19 @@ All data loading methods (`from_dbms`, `from_file`, `from_iterable`, `from_frame
 
 ## Features
 
-- **Automatic staging tables** – Data is loaded to staging before final destination
-- **Data Quality checks** – Built-in checks before final move
-- **Flexible move methods** – Multiple strategies for updating data
-- **Multiple source support** – Files, DataFrames, DBMS
-- **Native Airflow operator** – `DBHoseOperator` with template fields support
-- **Detailed logging** – All stages are logged with visual framing
-- **Automatic format detection** – BINARY or CSV format auto-selected based on source/destination compatibility
-- **Cross-platform column mapping** – Unified column metadata across PostgreSQL and ClickHouse
-- **Cython-optimized DDL generation** – Fast metadata extraction and staging DDL generation
+- **Automatic staging tables** Data is loaded to staging before final destination with three DDL variants:
+  - Full DDL (with indexes, partitions, engine)
+  - Simple DDL (columns only, no indexes)
+  - Temp DDL (temporary table, fastest for simple operations)
+- **Smart move strategies** Flexible strategies for data movement with automatic selection
+- **Direct DBConnector support** Pass `DBConnector` instances directly instead of Airflow connection IDs
+- **Data Quality checks** Built-in checks before final move
+- **Multiple source support** Files, DataFrames, DBMS
+- **Native Airflow operator** `DBHoseOperator` with template fields support
+- **Detailed logging** All stages are logged with visual framing
+- **Automatic format detection** BINARY or CSV format auto-selected based on source/destination compatibility
+- **Cross-platform column mapping** Unified column metadata across PostgreSQL and ClickHouse
+- **Cython-optimized DDL generation** Fast metadata extraction and staging DDL generation
 
 ## Beta Version Limitations
 
