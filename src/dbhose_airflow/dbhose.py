@@ -347,7 +347,7 @@ class DBHose:
     def _run_comparison_check(self, dq_check: DQCheck) -> None:
         """Run check comparing source and destination tables."""
 
-        if dq_check.generate_queryes:
+        if dq_check.generate_queries:
             self._run_comparison_with_generated_queries(dq_check)
         else:
             self._run_comparison_single_query(dq_check)
@@ -355,7 +355,7 @@ class DBHose:
     def _run_standalone_check(self, dq_check: DQCheck) -> None:
         """Run check on destination table only."""
 
-        if dq_check.generate_queryes:
+        if dq_check.generate_queries:
             self._run_standalone_with_generated_queries(dq_check)
         else:
             self._run_standalone_single_query(dq_check)

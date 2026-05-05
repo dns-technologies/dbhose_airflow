@@ -19,7 +19,7 @@ class DQTest(NamedTuple):
     """Data quality test."""
 
     description: str
-    generate_queryes: int
+    generate_queries: int
     need_source_table: int
 
 

@@ -24,7 +24,7 @@ DQCheck
       
       Человеко-читаемое описание проверки.
    
-   .. py:attribute:: generate_queryes
+   .. py:attribute:: generate_queries
       :type: int
       
       Генерирует ли объект SQL-запросы.

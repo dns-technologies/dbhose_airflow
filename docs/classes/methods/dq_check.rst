@@ -41,7 +41,7 @@ dq_check
 
       * - Тип
         - ``need_source_table``
-        - ``generate_queryes``
+        - ``generate_queries``
         - Описание
       * - **Сравнение агрегатов**
         - ✅ Да
